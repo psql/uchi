@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VibeDJ</title>
+<style>
+:root {
+  --bg:      #08080f;
+  --panel:   #10101c;
+  --card:    #17172a;
+  --border:  #252540;
+  --accent:  #8b5cf6;
+  --accent2: #ec4899;
+  --green:   #22c55e;
+  --red:     #ef4444;
+  --text:    #e2e2f0;
+  --muted:   #55557a;
+  --r: 6px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; display: flex; flex-direction: column; }
+
+/* ── Header ── */
+.hdr {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 18px; background: var(--panel);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10;
+}
+.logo {
+  font-size: 1.4rem; font-weight: 900; letter-spacing: -.02em;
+  background: linear-gradient(120deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 2s ease-in-out infinite; }
+.live-dot.off { background: var(--red); box-shadow: 0 0 8px var(--red); animation: none; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+.effect-badge {
+  font-size:.65rem; letter-spacing:.1em; padding: 2px 8px;
+  border-radius: 999px; background: rgba(139,92,246,.2); border: 1px solid var(--accent);
+  color: var(--accent); display: none;
+}
+.effect-badge.show { display: inline; animation: blink 1.5s ease-in-out infinite; }
+.bpm-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size:.75rem; }
+.bpm-wrap input {
+  width: 56px; background: var(--card); border: 1px solid var(--border);
+  color: var(--text); padding: 3px 6px; border-radius: var(--r); font-family: inherit; font-size:.8rem; text-align:center;
+}
+.hdr-btn {
+  padding: 4px 12px; border-radius: var(--r); border: 1px solid var(--border);
+  background: var(--card); color: var(--muted); font-family: inherit; font-size: .7rem;
+  letter-spacing: .08em; cursor: pointer; transition: all .2s;
+}
+.hdr-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Layout ── */
+.workspace {
+  display: flex; flex: 1; overflow: hidden;
+}
+
+/* ── Left: lights ── */
+.lights-col {
+  width: 195px; flex-shrink: 0;
+  background: var(--panel); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.col-title {
+  font-size: .6rem; letter-spacing: .18em; color: var(--muted); text-transform: uppercase;
+  padding: 10px 12px 6px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.col-title a { color: var(--accent); cursor: pointer; font-size:.6rem; text-decoration:none; }
+.lights-list { flex: 1; overflow-y: auto; padding: 6px; }
+.lights-list::-webkit-scrollbar { width: 4px; }
+.lights-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.light-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 5px; border-radius: 4px; cursor: pointer; transition: background .15s;
+}
+.light-row:hover { background: var(--card); }
+.light-row.selected { background: rgba(139,92,246,.12); }
+.ldot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.ldot.on { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.ldot.off { background: var(--muted); }
+.ldot.unreach { background: var(--red); }
+.lname { flex: 1; font-size: .68rem; color: #8888aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.light-row.selected .lname { color: var(--text); }
+input[type=checkbox].lchk { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+
+/* ── Center ── */
+.center-col {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 16px; padding: 16px; overflow-y: auto;
+  min-width: 0;
+}
+
+/* Color wheel */
+.wheel-wrap { position: relative; width: 260px; height: 260px; cursor: crosshair; flex-shrink: 0; }
+.wheel {
+  width: 100%; height: 100%; border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255,255,255,.88) 0%, transparent 62%),
+    conic-gradient(
+      hsl(0,100%,50%), hsl(30,100%,50%), hsl(60,100%,50%),
+      hsl(90,100%,50%), hsl(120,100%,50%), hsl(150,100%,50%),
+      hsl(180,100%,50%), hsl(210,100%,50%), hsl(240,100%,50%),
+      hsl(270,100%,50%), hsl(300,100%,50%), hsl(330,100%,50%),
+      hsl(360,100%,50%)
+    );
+  box-shadow: 0 0 50px rgba(139,92,246,.25), 0 0 100px rgba(236,72,153,.1);
+  transition: box-shadow .4s;
+}
+.wheel-cursor {
+  position: absolute; width: 18px; height: 18px; border-radius: 50%;
+  border: 2.5px solid #fff; box-shadow: 0 0 10px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.3);
+  transform: translate(-50%, -50%); pointer-events: none;
+  top: 50%; left: 50%; transition: background .1s;
+}
+.wheel-center-label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: .6rem; color: var(--muted); letter-spacing: .1em; pointer-events: none;
+}
+
+/* Preview bar */
+.preview-bar {
+  width: 260px; height: 36px; border-radius: 18px;
+  border: 1px solid var(--border); background: #111;
+  transition: background .3s, box-shadow .3s;
+}
+
+/* Sliders */
+.sliders { width: 260px; display: flex; flex-direction: column; gap: 10px; }
+.sl-row { display: flex; align-items: center; gap: 10px; }
+.sl-label { font-size:.62rem; color: var(--muted); letter-spacing:.1em; text-transform:uppercase; width: 76px; flex-shrink: 0; }
+.sl-val { font-size:.68rem; color: var(--muted); width: 38px; text-align: right; flex-shrink: 0; }
+input[type=range] {
+  flex: 1; -webkit-appearance: none; height: 5px; border-radius: 3px;
+  background: var(--border); outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; box-shadow: 0 0 8px rgba(139,92,246,.6);
+  border: 2px solid rgba(255,255,255,.3);
+}
+#bri-slider { background: linear-gradient(to right, #000, #fff); }
+
+/* Main buttons */
+.main-btns { display: flex; gap: 8px; }
+.btn {
+  padding: 8px 18px; border-radius: var(--r); border: 1px solid var(--border);
+  font-family: inherit; font-size: .7rem; font-weight: 700; letter-spacing: .09em;
+  cursor: pointer; transition: all .2s;
+}
+.btn-apply { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-apply:hover { background: #7c3aed; box-shadow: 0 0 20px rgba(139,92,246,.5); }
+.btn-off { background: var(--card); border-color: #ef444460; color: var(--red); }
+.btn-off:hover { background: rgba(239,68,68,.1); }
+.btn-on { background: var(--card); border-color: #22c55e60; color: var(--green); }
+.btn-on:hover { background: rgba(34,197,94,.1); }
+
+/* ── Right: effects + presets ── */
+.effects-col {
+  width: 215px; flex-shrink: 0;
+  background: var(--panel); border-left: 1px solid var(--border);
+  overflow-y: auto; padding: 0;
+}
+.effects-col::-webkit-scrollbar { width: 4px; }
+.effects-col::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.section { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+.sec-title { font-size:.6rem; letter-spacing:.18em; color: var(--muted); text-transform:uppercase; margin-bottom: 8px; }
+
+/* Effect grid */
+.effect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.fx-btn {
+  padding: 7px 4px; border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--card); color: var(--muted); font-family: inherit;
+  font-size: .62rem; font-weight: 700; letter-spacing: .07em; cursor: pointer;
+  transition: all .2s; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.fx-btn .icon { font-size: .9rem; }
+.fx-btn:hover { border-color: var(--accent); color: var(--accent); }
+.fx-btn.active {
+  border-color: var(--accent); background: rgba(139,92,246,.2); color: #c4b5fd;
+  box-shadow: 0 0 12px rgba(139,92,246,.3); animation: blink 2s ease-in-out infinite;
+}
+.fx-btn.stop { grid-column: span 2; border-color: rgba(239,68,68,.3); color: var(--red); }
+.fx-btn.stop:hover { background: rgba(239,68,68,.1); border-color: var(--red); }
+
+/* Preset grid */
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.ps-btn {
+  padding: 8px 4px; border: 2px solid transparent; border-radius: var(--r);
+  font-family: inherit; font-size: .62rem; font-weight: 700; letter-spacing: .06em;
+  cursor: pointer; transition: transform .15s, box-shadow .15s;
+  color: rgba(0,0,0,.7); text-shadow: 0 1px 2px rgba(255,255,255,.3);
+}
+.ps-btn:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+
+/* Custom presets */
+.custom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }
+.save-btn {
+  width: 100%; padding: 6px; border-radius: var(--r); border: 1px dashed var(--border);
+  background: transparent; color: var(--muted); font-family: inherit; font-size: .65rem;
+  cursor: pointer; transition: all .2s; letter-spacing: .06em;
+}
+.save-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Transport ── */
+.transport {
+  display: flex; gap: 8px; padding: 10px 18px;
+  background: var(--panel); border-top: 1px solid var(--border);
+  align-items: center; flex-wrap: wrap; flex-shrink: 0;
+}
+.transport .label { font-size: .6rem; color: var(--muted); letter-spacing: .1em; }
+.t-btn {
+  padding: 6px 14px; border-radius: var(--r); border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-family: inherit; font-size: .68rem;
+  font-weight: 700; letter-spacing: .08em; cursor: pointer; transition: all .2s;
+}
+.t-btn:hover { border-color: var(--accent); color: var(--accent); }
+.t-btn.danger:hover { border-color: var(--red); color: var(--red); }
+.fade-dur { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.fade-dur input[type=range] { width: 100px; }
+.fade-dur .sl-val { width: 28px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="logo">VibeDJ</div>
+  <div class="live-dot off" id="live-dot"></div>
+  <span style="font-size:.65rem;color:var(--muted)" id="conn-status">connecting…</span>
+  <div class="effect-badge" id="effect-badge">● EFFECT</div>
+  <span style="margin-left:12px;font-size:.62rem;color:var(--muted)" id="light-count"></span>
+  <div class="bpm-wrap">
+    BPM <input type="number" id="bpm-input" value="120" min="40" max="300" title="Effect BPM">
+  </div>
+  <button class="hdr-btn" id="refresh-btn">↺ REFRESH</button>
+</div>
+
+<!-- WORKSPACE -->
+<div class="workspace">
+
+  <!-- LEFT: light list -->
+  <div class="lights-col">
+    <div class="col-title">
+      Lights
+      <a id="sel-all-link">all</a>
+    </div>
+    <div class="lights-list" id="lights-list">
+      <div style="color:var(--muted);font-size:.7rem;padding:10px">Loading…</div>
+    </div>
+  </div>
+
+  <!-- CENTER: color control -->
+  <div class="center-col">
+
+    <div class="wheel-wrap" id="wheel-wrap">
+      <div class="wheel" id="wheel"></div>
+      <div class="wheel-center-label">DRAG</div>
+      <div class="wheel-cursor" id="cursor"></div>
+    </div>
+
+    <div class="preview-bar" id="preview-bar"></div>
+
+    <div class="sliders">
+      <div class="sl-row">
+        <span class="sl-label">Brightness</span>
+        <input type="range" id="bri-slider" min="1" max="254" value="200">
+        <span class="sl-val" id="bri-val">200</span>
+      </div>
+      <div class="sl-row">
+        <span class="sl-label">Saturation</span>
+        <input type="range" id="sat-slider" min="0" max="254" value="254">
+        <span class="sl-val" id="sat-val">254</span>
+      </div>
+    </div>
+
+    <div class="main-btns">
+      <button class="btn btn-apply" id="apply-btn">▶ APPLY</button>
+      <button class="btn btn-on"  id="on-btn">ALL ON</button>
+      <button class="btn btn-off" id="off-btn">■ OFF</button>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: effects + presets -->
+  <div class="effects-col">
+
+    <div class="section">
+      <div class="sec-title">Effects</div>
+      <div class="effect-grid">
+        <button class="fx-btn" data-fx="colorCycle"><span class="icon">🌈</span>CYCLE</button>
+        <button class="fx-btn" data-fx="strobe"><span class="icon">⚡</span>STROBE</button>
+        <button class="fx-btn" data-fx="party"><span class="icon">🎉</span>PARTY</button>
+        <button class="fx-btn" data-fx="breathe"><span class="icon">🌊</span>BREATHE</button>
+        <button class="fx-btn" data-fx="candle"><span class="icon">🕯</span>CANDLE</button>
+        <button class="fx-btn" data-fx="rainbow"><span class="icon">✨</span>RAINBOW</button>
+        <button class="fx-btn" data-fx="redAlert"><span class="icon">🚨</span>ALERT</button>
+        <button class="fx-btn stop" data-fx="none"><span class="icon">⏹</span>STOP FX</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="sec-title">Modes <span style="font-size:.52rem;opacity:.5">wake/sleep use duration (min)</span></div>
+      <div class="effect-grid" style="margin-bottom:4px">
+        <button class="fx-btn" data-fx="wake"><span class="icon">⏰</span>WAKE</button>
+        <button class="fx-btn" data-fx="sleep"><span class="icon">😴</span>SLEEP</button>
+      </div>
+      <div class="preset-grid">
+        <button class="ps-btn mode-btn" data-mode="movie"    style="background:linear-gradient(135deg,#1a0a00,#4a2000);color:#ffb347">🎬 Movie</button>
+        <button class="ps-btn mode-btn" data-mode="nightlamp" style="background:linear-gradient(135deg,#1c0800,#3b1200);color:#ff8c42">🌙 Night</button>
+        <button class="ps-btn mode-btn" data-mode="reading"  style="background:linear-gradient(135deg,#e8e0d0,#fff8e7);color:#333">📖 Read</button>
+        <button class="ps-btn mode-btn" data-mode="meditate" style="background:linear-gradient(135deg,#1a0030,#2d0060);color:#c084fc">🧘 Zen</button>
+        <button class="ps-btn mode-btn" data-mode="focus"    style="background:linear-gradient(135deg,#001a33,#0066cc);color:#7dd3fc">💡 Focus</button>
+        <button class="ps-btn mode-btn" data-mode="party"    style="background:linear-gradient(135deg,#330066,#cc0066);color:#f0abfc">🎉 Disco</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="sec-title">Presets</div>
+      <div class="preset-grid" id="preset-grid">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="sec-title">Custom Presets</div>
+      <div class="custom-grid" id="custom-grid"></div>
+      <button class="save-btn" id="save-btn">+ Save Current</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- TRANSPORT -->
+<div class="transport">
+  <span class="label">FADE</span>
+  <button class="t-btn" id="fade-in-btn">▲ FADE IN</button>
+  <button class="t-btn" id="fade-out-btn">▼ FADE OUT</button>
+  <button class="t-btn" id="sunrise-btn">🌅 SUNRISE</button>
+  <button class="t-btn" id="sunset-btn">🌇 SUNSET</button>
+  <button class="t-btn danger" id="blackout-btn">◼ BLACKOUT</button>
+  <div class="fade-dur">
+    <span style="font-size:.6rem;color:var(--muted)">DURATION</span>
+    <input type="range" id="dur-slider" min="1" max="60" value="5">
+    <span class="sl-val" id="dur-val">5s</span>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let H = 0, S = 254, B = 200;         // current color (Hue API units)
+let fadeDuration = 5;                 // seconds
+let activeEffect = null;
+let allLights = {};                   // { id: lightObj }
+let checkedIds = new Set();           // selected light IDs
+
+// ── Built-in presets ───────────────────────────────────────────────────────────
+const PRESETS = [
+  { key:'relax',    name:'Relax',    bg:'linear-gradient(135deg,#ff8c00,#ffd700)', state:{ on:true, hue:8378,  sat:144, bri:150 }},
+  { key:'romance',  name:'Romance',  bg:'linear-gradient(135deg,#8b0000,#c2185b)', state:{ on:true, hue:63000, sat:220, bri:100 }},
+  { key:'chill',    name:'Chill',    bg:'linear-gradient(135deg,#4527a0,#7b68ee)', state:{ on:true, hue:45000, sat:220, bri:120 }},
+  { key:'arctic',   name:'Arctic',   bg:'linear-gradient(135deg,#006064,#40e0d0)', state:{ on:true, hue:33620, sat:220, bri:200 }},
+  { key:'focus',    name:'Focus',    bg:'linear-gradient(135deg,#e8f4f8,#90caf9)', state:{ on:true, ct:233,            bri:219 }},
+  { key:'energize', name:'Energize', bg:'linear-gradient(135deg,#b3e5fc,#ffffff)', state:{ on:true, ct:153,            bri:254 }},
+  { key:'sunset',   name:'Sunset',   bg:'linear-gradient(135deg,#bf360c,#ff7043)', state:{ on:true, hue:3640,  sat:254, bri:180 }},
+  { key:'rave',     name:'Rave',     bg:'linear-gradient(135deg,#6a0dad,#ff1493)', state:{ on:true, hue:55000, sat:254, bri:254 }},
+];
+
+// ── API helpers ────────────────────────────────────────────────────────────────
+const api = {
+  get:  url       => fetch(url).then(r => r.json()),
+  put:  (url, b)  => fetch(url,  { method:'PUT',  headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
+  post: (url, b)  => fetch(url,  { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
+};
+
+function getTargetIds() {
+  return [...checkedIds];
+}
+
+async function applyToSelected(state) {
+  const ids = getTargetIds();
+  if (!ids.length) return;
+  // Always send _ids so server knows which lights (or omit for reachable-only)
+  const allCount = Object.keys(allLights).length;
+  if (ids.length >= allCount) {
+    await api.put('/api/all/state', state);          // reachable-only fast path
+  } else {
+    await api.put('/api/all/state', { ...state, _ids: ids });
+  }
+}
+
+// ── Color wheel ────────────────────────────────────────────────────────────────
+function initWheel() {
+  const wrap   = document.getElementById('wheel-wrap');
+  const cursor = document.getElementById('cursor');
+
+  function pickColor(e) {
+    const rect = wrap.getBoundingClientRect();
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const dx = (e.clientX || e.touches?.[0].clientX) - rect.left - cx;
+    const dy = (e.clientY || e.touches?.[0].clientY) - rect.top  - cy;
+    const r  = Math.sqrt(dx*dx + dy*dy);
+    const radius = cx - 4;
+    if (r > radius) return;
+
+    // angle: CSS conic starts at top (north), clockwise
+    let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI; // 0=east, clockwise in screen coords
+    let cssAngle = ((angleDeg + 90) + 360) % 360;       // 0=north to match conic-gradient
+
+    H = Math.round(cssAngle / 360 * 65535);
+    S = Math.round(r / radius * 254);
+
+    cursor.style.left = (dx + cx) + 'px';
+    cursor.style.top  = (dy + cy) + 'px';
+    updatePreview();
+  }
+
+  wrap.addEventListener('click',     pickColor);
+  wrap.addEventListener('mousedown',  pickColor);
+  wrap.addEventListener('mousemove',  e => { if (e.buttons === 1) pickColor(e); });
+  wrap.addEventListener('touchstart', e => { e.preventDefault(); pickColor(e); });
+  wrap.addEventListener('touchmove',  e => { e.preventDefault(); pickColor(e); });
+}
+
+// ── Preview ────────────────────────────────────────────────────────────────────
+function updatePreview() {
+  const h = Math.round(H / 65535 * 360);
+  const s = Math.round(S / 254 * 100);
+  const l = Math.round(B / 254 * 50);
+  const css = `hsl(${h},${s}%,${l}%)`;
+  const mid = `hsl(${h},${s}%,50%)`;
+
+  document.getElementById('preview-bar').style.cssText =
+    `background: linear-gradient(90deg, hsl(${h},${s}%,5%), ${mid}, hsl(${h},${s}%,90%)); box-shadow: 0 0 20px ${mid}40;`;
+  document.getElementById('cursor').style.background = mid;
+  document.getElementById('wheel').style.boxShadow =
+    `0 0 50px ${mid}55, 0 0 100px ${mid}22`;
+  document.getElementById('bri-slider').style.background =
+    `linear-gradient(to right, #000, ${mid})`;
+}
+
+// ── Light list ─────────────────────────────────────────────────────────────────
+function renderLights(lights) {
+  allLights = lights;
+  const entries = Object.entries(lights);
+  document.getElementById('light-count').textContent = `${entries.length} lights`;
+
+  const list = document.getElementById('lights-list');
+  list.innerHTML = '';
+
+  // Sort: reachable first
+  entries.sort(([,a],[,b]) => (b.state.reachable ? 1 : 0) - (a.state.reachable ? 1 : 0));
+
+  entries.forEach(([id, light]) => {
+    checkedIds.add(id); // select all by default
+    const row = document.createElement('div');
+    row.className = 'light-row selected';
+    row.dataset.id = id;
+    const reachable = light.state.reachable;
+    const on = light.state.on;
+    const dotClass = !reachable ? 'unreach' : on ? 'on' : 'off';
+    row.innerHTML = `
+      <div class="ldot ${dotClass}"></div>
+      <span class="lname" title="${light.name}">${light.name}</span>
+      <input type="checkbox" class="lchk" checked>
+    `;
+    row.querySelector('.lchk').addEventListener('change', e => {
+      if (e.target.checked) { checkedIds.add(id); row.classList.add('selected'); }
+      else { checkedIds.delete(id); row.classList.remove('selected'); }
+    });
+    row.addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT') return;
+      const cb = row.querySelector('.lchk');
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+    });
+    list.appendChild(row);
+  });
+}
+
+// ── Effects ────────────────────────────────────────────────────────────────────
+async function setEffect(name) {
+  const bpm      = parseInt(document.getElementById('bpm-input').value) || 120;
+  const lights   = getTargetIds();
+  const duration = fadeDuration; // for wake/sleep: interpreted as minutes on server
+  const data = await api.post('/api/effect', { name, bpm, lights, duration });
+  activeEffect = data.activeEffect;
+  updateEffectUI();
+}
+
+// ── Instant mode presets ───────────────────────────────────────────────────────
+const MODES = {
+  movie:     { on:true, ct:400, bri:45,  transitiontime:20 },
+  nightlamp: { on:true, ct:500, bri:6,   transitiontime:30 },
+  reading:   { on:true, ct:300, bri:230, transitiontime:10 },
+  meditate:  { on:true, hue:44000, sat:180, bri:60,  transitiontime:30 },
+  focus:     { on:true, ct:233, bri:220, transitiontime:10 },
+  party:     { on:true, hue:55000, sat:254, bri:254, transitiontime:5  },
+};
+async function applyMode(key) {
+  const s = MODES[key];
+  if (!s) return;
+  await applyToSelected({ ...s, transitiontime: Math.round(fadeDuration * 10) || s.transitiontime });
+}
+
+function updateEffectUI() {
+  document.querySelectorAll('.fx-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.fx === activeEffect);
+  });
+  const badge = document.getElementById('effect-badge');
+  if (activeEffect && activeEffect !== 'none') {
+    badge.textContent = `● ${activeEffect.toUpperCase()}`;
+    badge.classList.add('show');
+  } else {
+    badge.classList.remove('show');
+  }
+}
+
+// ── Presets ────────────────────────────────────────────────────────────────────
+function renderPresets() {
+  const grid = document.getElementById('preset-grid');
+  PRESETS.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'ps-btn';
+    btn.style.background = p.bg;
+    btn.textContent = p.name;
+    btn.addEventListener('click', async () => {
+      const state = { transitiontime: Math.round(fadeDuration * 10), ...p.state };
+      await applyToSelected(state);
+      if (!p.state.ct) { H = p.state.hue; S = p.state.sat; }
+      if (p.state.bri) B = p.state.bri;
+      document.getElementById('bri-slider').value = B;
+      document.getElementById('sat-slider').value = S;
+      updatePreview();
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function loadCustomPresets() {
+  const saved = JSON.parse(localStorage.getItem('vibedj_custom') || '[]');
+  const grid = document.getElementById('custom-grid');
+  grid.innerHTML = '';
+  saved.forEach((p, i) => {
+    const h = Math.round(p.H / 65535 * 360);
+    const s = Math.round(p.S / 254 * 100);
+    const btn = document.createElement('button');
+    btn.className = 'ps-btn';
+    btn.style.background = `hsl(${h},${s}%,40%)`;
+    btn.style.color = p.B > 127 ? '#000' : '#fff';
+    btn.style.fontSize = '.6rem';
+    btn.innerHTML = `${p.name}<br><span style="opacity:.6;font-size:.55rem">${h}° S${p.S}</span>`;
+    btn.title = 'Left click: apply | Right click: delete';
+    btn.addEventListener('click', async () => {
+      H = p.H; S = p.S; B = p.B;
+      document.getElementById('bri-slider').value = B;
+      document.getElementById('sat-slider').value = S;
+      updatePreview();
+      await applyToSelected({ on: true, hue: H, sat: S, bri: B, transitiontime: Math.round(fadeDuration * 10) });
+    });
+    btn.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (confirm(`Delete preset "${p.name}"?`)) {
+        saved.splice(i, 1);
+        localStorage.setItem('vibedj_custom', JSON.stringify(saved));
+        loadCustomPresets();
+      }
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function saveCustomPreset() {
+  const name = prompt('Name this preset:');
+  if (!name) return;
+  const saved = JSON.parse(localStorage.getItem('vibedj_custom') || '[]');
+  saved.push({ name, H, S, B });
+  localStorage.setItem('vibedj_custom', JSON.stringify(saved));
+  loadCustomPresets();
+}
+
+// ── Fade helpers ───────────────────────────────────────────────────────────────
+async function fadeIn() {
+  await applyToSelected({ on: true, hue: H, sat: S, bri: 1, transitiontime: 0 });
+  await new Promise(r => setTimeout(r, 400));
+  await applyToSelected({ on: true, hue: H, sat: S, bri: B, transitiontime: fadeDuration * 10 });
+}
+
+async function fadeOut() {
+  const t = fadeDuration * 10;
+  await applyToSelected({ bri: 1, transitiontime: t });
+  setTimeout(() => applyToSelected({ on: false, transitiontime: 0 }), fadeDuration * 1000 + 500);
+}
+
+async function sunrise() {
+  // warm → cool white, dark → bright, over fadeDuration
+  await applyToSelected({ on: true, hue: 8000, sat: 200, bri: 1, transitiontime: 0 });
+  await new Promise(r => setTimeout(r, 400));
+  await applyToSelected({ on: true, ct: 370, bri: 50, transitiontime: fadeDuration * 3 });
+  setTimeout(async () => {
+    await applyToSelected({ on: true, ct: 233, bri: 200, transitiontime: fadeDuration * 7 });
+  }, fadeDuration * 1000 * 0.3);
+}
+
+async function sunset() {
+  await applyToSelected({ on: true, ct: 233, bri: B, transitiontime: 0 });
+  await new Promise(r => setTimeout(r, 400));
+  await applyToSelected({ on: true, hue: 5000, sat: 200, bri: 80, transitiontime: fadeDuration * 7 });
+  setTimeout(async () => {
+    await applyToSelected({ on: true, hue: 2000, sat: 254, bri: 20, transitiontime: fadeDuration * 3 });
+    setTimeout(() => applyToSelected({ on: false, transitiontime: fadeDuration * 2 }), fadeDuration * 400);
+  }, fadeDuration * 1000 * 0.7);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const [lights, status] = await Promise.all([
+      api.get('/api/lights'),
+      api.get('/api/status'),
+    ]);
+    renderLights(lights);
+    activeEffect = status.activeEffect;
+    updateEffectUI();
+    document.getElementById('live-dot').classList.remove('off');
+    const reachCount = (status.reachable || []).length;
+    document.getElementById('conn-status').textContent =
+      `bridge live · ${reachCount} reachable`;
+  } catch (e) {
+    document.getElementById('conn-status').textContent = 'bridge offline';
+  }
+  updatePreview();
+}
+
+// ── Wiring ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initWheel();
+  renderPresets();
+  loadCustomPresets();
+  init();
+
+  // Sliders
+  document.getElementById('bri-slider').addEventListener('input', e => {
+    B = parseInt(e.target.value);
+    document.getElementById('bri-val').textContent = B;
+    updatePreview();
+  });
+  document.getElementById('sat-slider').addEventListener('input', e => {
+    S = parseInt(e.target.value);
+    document.getElementById('sat-val').textContent = S;
+    updatePreview();
+  });
+  document.getElementById('dur-slider').addEventListener('input', e => {
+    fadeDuration = parseInt(e.target.value);
+    document.getElementById('dur-val').textContent = fadeDuration + 's';
+  });
+
+  // Apply / on / off
+  document.getElementById('apply-btn').addEventListener('click', () => {
+    applyToSelected({ on: true, hue: H, sat: S, bri: B, transitiontime: Math.round(fadeDuration * 10) });
+  });
+  document.getElementById('on-btn').addEventListener('click', () => {
+    applyToSelected({ on: true, bri: B, transitiontime: 4 });
+  });
+  document.getElementById('off-btn').addEventListener('click', () => {
+    applyToSelected({ on: false, transitiontime: 0 });
+  });
+  document.getElementById('blackout-btn').addEventListener('click', () => {
+    applyToSelected({ on: false, transitiontime: 0 });
+  });
+
+  // Effects
+  document.querySelectorAll('.fx-btn').forEach(btn => {
+    btn.addEventListener('click', () => setEffect(btn.dataset.fx));
+  });
+
+  // Transport
+  document.getElementById('fade-in-btn').addEventListener('click',  fadeIn);
+  document.getElementById('fade-out-btn').addEventListener('click', fadeOut);
+  document.getElementById('sunrise-btn').addEventListener('click',  sunrise);
+  document.getElementById('sunset-btn').addEventListener('click',   sunset);
+
+  // Custom presets
+  document.getElementById('save-btn').addEventListener('click', saveCustomPreset);
+
+  // Select all / none
+  document.getElementById('sel-all-link').addEventListener('click', () => {
+    const allChecked = checkedIds.size === Object.keys(allLights).length;
+    document.querySelectorAll('.lchk').forEach((cb, i) => {
+      cb.checked = !allChecked;
+      cb.dispatchEvent(new Event('change'));
+    });
+  });
+
+  // Refresh
+  document.getElementById('refresh-btn').addEventListener('click', init);
+
+  // BPM: update running effect immediately
+  document.getElementById('bpm-input').addEventListener('change', () => {
+    if (activeEffect) setEffect(activeEffect);
+  });
+
+  // Mode buttons
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyMode(btn.dataset.mode));
+  });
+
+  // Duration label hint for wake/sleep
+  document.querySelectorAll('.fx-btn[data-fx="wake"], .fx-btn[data-fx="sleep"]').forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+      document.getElementById('dur-val').textContent = fadeDuration + 'min';
+    });
+    btn.addEventListener('mouseleave', () => {
+      document.getElementById('dur-val').textContent = fadeDuration + 's';
+    });
+  });
+});
+</script>
+</body>
+</html>
