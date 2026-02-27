@@ -7,6 +7,8 @@ from config import cfg
 
 log = logging.getLogger('uchi.vibedj')
 
+FADE = 30   # 3 seconds (Hue transitiontime units = 100 ms each)
+
 # ── Color table (name → Hue API params) ──────────────────────────────────────
 COLORS = {
     'red':      {'hue': 0,     'sat': 254},
@@ -30,22 +32,22 @@ COLORS = {
 }
 
 PRESETS = {
-    'relax':    {'on': True, 'hue': 8378,  'sat': 144, 'bri': 150, 'transitiontime': 10},
-    'romance':  {'on': True, 'hue': 63000, 'sat': 220, 'bri': 100, 'transitiontime': 20},
-    'chill':    {'on': True, 'hue': 45000, 'sat': 220, 'bri': 120, 'transitiontime': 15},
-    'arctic':   {'on': True, 'hue': 33620, 'sat': 220, 'bri': 200, 'transitiontime': 10},
-    'focus':    {'on': True, 'ct': 233,             'bri': 219, 'transitiontime': 10},
-    'energize': {'on': True, 'ct': 153,             'bri': 254, 'transitiontime': 10},
-    'sunset':   {'on': True, 'hue': 3640,  'sat': 254, 'bri': 180, 'transitiontime': 20},
-    'rave':     {'on': True, 'hue': 55000, 'sat': 254, 'bri': 254, 'transitiontime': 5},
+    'relax':    {'on': True, 'hue': 8378,  'sat': 144, 'bri': 150, 'transitiontime': FADE},
+    'romance':  {'on': True, 'hue': 63000, 'sat': 220, 'bri': 100, 'transitiontime': FADE},
+    'chill':    {'on': True, 'hue': 45000, 'sat': 220, 'bri': 120, 'transitiontime': FADE},
+    'arctic':   {'on': True, 'hue': 33620, 'sat': 220, 'bri': 200, 'transitiontime': FADE},
+    'focus':    {'on': True, 'ct': 233,             'bri': 219, 'transitiontime': FADE},
+    'energize': {'on': True, 'ct': 153,             'bri': 254, 'transitiontime': FADE},
+    'sunset':   {'on': True, 'hue': 3640,  'sat': 254, 'bri': 180, 'transitiontime': FADE},
+    'rave':     {'on': True, 'hue': 55000, 'sat': 254, 'bri': 254, 'transitiontime': FADE},
 }
 
 MODES = {
-    'movie':     {'on': True, 'ct': 400, 'bri': 45,  'transitiontime': 20},
-    'nightlamp': {'on': True, 'ct': 500, 'bri': 6,   'transitiontime': 30},
-    'reading':   {'on': True, 'ct': 300, 'bri': 230, 'transitiontime': 10},
-    'meditate':  {'on': True, 'hue': 44000, 'sat': 180, 'bri': 60, 'transitiontime': 30},
-    'focus':     {'on': True, 'ct': 233, 'bri': 220, 'transitiontime': 10},
+    'movie':     {'on': True, 'ct': 400, 'bri': 45,  'transitiontime': FADE},
+    'nightlamp': {'on': True, 'ct': 500, 'bri': 6,   'transitiontime': FADE},
+    'reading':   {'on': True, 'ct': 300, 'bri': 230, 'transitiontime': FADE},
+    'meditate':  {'on': True, 'hue': 44000, 'sat': 180, 'bri': 60, 'transitiontime': FADE},
+    'focus':     {'on': True, 'ct': 233, 'bri': 220, 'transitiontime': FADE},
 }
 
 
@@ -83,7 +85,7 @@ class VibeDJPlugin:
         color = p.get('color', 'white').lower()
         bri   = round(int(p.get('brightness', 80)) / 100 * 254)
         c     = COLORS.get(color, COLORS['white'])
-        return await self._put('/api/all/state', {'on': True, 'bri': bri, 'transitiontime': 6, **c})
+        return await self._put('/api/all/state', {'on': True, 'bri': bri, 'transitiontime': FADE, **c})
 
     async def _do_set_effect(self, p):
         return await self._post('/api/effect', {
@@ -102,7 +104,7 @@ class VibeDJPlugin:
 
     async def _do_turn_on(self, p):
         bri = round(int(p.get('brightness', 80)) / 100 * 254)
-        return await self._put('/api/all/state', {'on': True, 'bri': bri, 'transitiontime': 5})
+        return await self._put('/api/all/state', {'on': True, 'bri': bri, 'transitiontime': FADE})
 
     async def _do_turn_off(self, _p):
         return await self._put('/api/all/state', {'on': False, 'transitiontime': 0})

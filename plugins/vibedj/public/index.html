@@ -56,9 +56,7 @@ body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira 
 .hdr-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Layout ── */
-.workspace {
-  display: flex; flex: 1; overflow: hidden;
-}
+.workspace { display: flex; flex: 1; overflow: hidden; }
 
 /* ── Left: lights ── */
 .lights-col {
@@ -71,7 +69,16 @@ body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira 
   padding: 10px 12px 6px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
 }
+.col-title-actions { display: flex; gap: 8px; align-items: center; }
 .col-title a { color: var(--accent); cursor: pointer; font-size:.6rem; text-decoration:none; }
+.col-title a:hover { opacity: .7; }
+
+/* ── Scan bar ── */
+.scan-bar { flex-shrink: 0; border-bottom: 1px solid var(--border); display: none; }
+.scan-track { height: 2px; background: var(--border); }
+.scan-fill  { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .5s linear; box-shadow: 0 0 6px var(--accent); }
+.scan-lbl   { font-size: .55rem; color: var(--accent); letter-spacing: .12em; padding: 5px 12px; animation: blink 1.5s ease-in-out infinite; }
+
 .lights-list { flex: 1; overflow-y: auto; padding: 6px; }
 .lights-list::-webkit-scrollbar { width: 4px; }
 .lights-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -81,9 +88,11 @@ body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira 
 }
 .light-row:hover { background: var(--card); }
 .light-row.selected { background: rgba(139,92,246,.12); }
+.light-row.new-light { animation: newlight .6s ease-in-out 4; }
+@keyframes newlight { 0%,100%{background:rgba(139,92,246,.12)} 50%{background:rgba(139,92,246,.35)} }
 .ldot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.ldot.on { background: var(--green); box-shadow: 0 0 5px var(--green); }
-.ldot.off { background: var(--muted); }
+.ldot.on      { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.ldot.off     { background: var(--muted); }
 .ldot.unreach { background: var(--red); }
 .lname { flex: 1; font-size: .68rem; color: #8888aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .light-row.selected .lname { color: var(--text); }
@@ -92,8 +101,7 @@ input[type=checkbox].lchk { accent-color: var(--accent); cursor: pointer; flex-s
 /* ── Center ── */
 .center-col {
   flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 16px; padding: 16px; overflow-y: auto;
-  min-width: 0;
+  justify-content: center; gap: 16px; padding: 16px; overflow-y: auto; min-width: 0;
 }
 
 /* Color wheel */
@@ -122,15 +130,11 @@ input[type=checkbox].lchk { accent-color: var(--accent); cursor: pointer; flex-s
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: .6rem; color: var(--muted); letter-spacing: .1em; pointer-events: none;
 }
-
-/* Preview bar */
 .preview-bar {
   width: 260px; height: 36px; border-radius: 18px;
   border: 1px solid var(--border); background: #111;
   transition: background .3s, box-shadow .3s;
 }
-
-/* Sliders */
 .sliders { width: 260px; display: flex; flex-direction: column; gap: 10px; }
 .sl-row { display: flex; align-items: center; gap: 10px; }
 .sl-label { font-size:.62rem; color: var(--muted); letter-spacing:.1em; text-transform:uppercase; width: 76px; flex-shrink: 0; }
@@ -145,8 +149,6 @@ input[type=range]::-webkit-slider-thumb {
   border: 2px solid rgba(255,255,255,.3);
 }
 #bri-slider { background: linear-gradient(to right, #000, #fff); }
-
-/* Main buttons */
 .main-btns { display: flex; gap: 8px; }
 .btn {
   padding: 8px 18px; border-radius: var(--r); border: 1px solid var(--border);
@@ -170,8 +172,6 @@ input[type=range]::-webkit-slider-thumb {
 .effects-col::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .section { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
 .sec-title { font-size:.6rem; letter-spacing:.18em; color: var(--muted); text-transform:uppercase; margin-bottom: 8px; }
-
-/* Effect grid */
 .effect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .fx-btn {
   padding: 7px 4px; border: 1px solid var(--border); border-radius: var(--r);
@@ -187,8 +187,6 @@ input[type=range]::-webkit-slider-thumb {
 }
 .fx-btn.stop { grid-column: span 2; border-color: rgba(239,68,68,.3); color: var(--red); }
 .fx-btn.stop:hover { background: rgba(239,68,68,.1); border-color: var(--red); }
-
-/* Preset grid */
 .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .ps-btn {
   padding: 8px 4px; border: 2px solid transparent; border-radius: var(--r);
@@ -197,8 +195,6 @@ input[type=range]::-webkit-slider-thumb {
   color: rgba(0,0,0,.7); text-shadow: 0 1px 2px rgba(255,255,255,.3);
 }
 .ps-btn:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(0,0,0,.4); }
-
-/* Custom presets */
 .custom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }
 .save-btn {
   width: 100%; padding: 6px; border-radius: var(--r); border: 1px dashed var(--border);
@@ -224,6 +220,62 @@ input[type=range]::-webkit-slider-thumb {
 .fade-dur { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .fade-dur input[type=range] { width: 100px; }
 .fade-dur .sl-val { width: 28px; }
+
+/* ── Settings Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.82);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; padding: 28px; width: 500px; max-width: 96vw;
+  max-height: 88vh; overflow-y: auto;
+  box-shadow: 0 0 80px rgba(139,92,246,.25), 0 30px 60px rgba(0,0,0,.5);
+  transform: translateY(10px); transition: transform .25s;
+}
+.modal-overlay.open .modal-box { transform: translateY(0); }
+.modal-box::-webkit-scrollbar { width: 4px; }
+.modal-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.modal-title {
+  font-size: 1.1rem; font-weight: 900; letter-spacing: -.02em; margin-bottom: 4px;
+  background: linear-gradient(120deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.modal-sub { font-size: .65rem; color: var(--muted); margin-bottom: 20px; letter-spacing: .06em; }
+.modal-section {
+  font-size: .55rem; letter-spacing: .18em; color: var(--accent); text-transform: uppercase;
+  margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.setting-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.setting-label { font-size: .6rem; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.setting-input {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  padding: 8px 11px; border-radius: var(--r); font-family: inherit; font-size: .8rem; width: 100%;
+  transition: border-color .2s;
+}
+.setting-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(139,92,246,.2); }
+.setting-hint { font-size: .58rem; color: var(--muted); }
+.modal-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+.btn-cancel { background: var(--card); border-color: var(--border); color: var(--muted); }
+.btn-cancel:hover { border-color: var(--muted); color: var(--text); }
+.modal-notice {
+  margin-top: 14px; padding: 10px 14px; border-radius: var(--r);
+  background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3);
+  color: #fbbf24; font-size: .68rem; letter-spacing: .04em; display: none;
+}
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(16px);
+  background: var(--card); border: 1px solid var(--accent); color: var(--text);
+  padding: 10px 22px; border-radius: 999px; font-size: .75rem; letter-spacing: .05em;
+  box-shadow: 0 0 30px rgba(139,92,246,.4); opacity: 0;
+  transition: opacity .35s, transform .35s; z-index: 200; pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -239,6 +291,7 @@ input[type=range]::-webkit-slider-thumb {
     BPM <input type="number" id="bpm-input" value="120" min="40" max="300" title="Effect BPM">
   </div>
   <button class="hdr-btn" id="refresh-btn">↺ REFRESH</button>
+  <button class="hdr-btn" id="settings-btn">⚙ SETTINGS</button>
 </div>
 
 <!-- WORKSPACE -->
@@ -248,7 +301,14 @@ input[type=range]::-webkit-slider-thumb {
   <div class="lights-col">
     <div class="col-title">
       Lights
-      <a id="sel-all-link">all</a>
+      <div class="col-title-actions">
+        <a id="sel-all-link">all</a>
+        <a id="tune-in-link" title="Scan for new lights and onboard them with a welcome show">✨ adopt</a>
+      </div>
+    </div>
+    <div class="scan-bar" id="scan-bar">
+      <div class="scan-track"><div class="scan-fill" id="scan-fill"></div></div>
+      <div class="scan-lbl" id="scan-lbl">✦ searching for new lights…</div>
     </div>
     <div class="lights-list" id="lights-list">
       <div style="color:var(--muted);font-size:.7rem;padding:10px">Loading…</div>
@@ -311,20 +371,18 @@ input[type=range]::-webkit-slider-thumb {
         <button class="fx-btn" data-fx="sleep"><span class="icon">😴</span>SLEEP</button>
       </div>
       <div class="preset-grid">
-        <button class="ps-btn mode-btn" data-mode="movie"    style="background:linear-gradient(135deg,#1a0a00,#4a2000);color:#ffb347">🎬 Movie</button>
+        <button class="ps-btn mode-btn" data-mode="movie"     style="background:linear-gradient(135deg,#1a0a00,#4a2000);color:#ffb347">🎬 Movie</button>
         <button class="ps-btn mode-btn" data-mode="nightlamp" style="background:linear-gradient(135deg,#1c0800,#3b1200);color:#ff8c42">🌙 Night</button>
-        <button class="ps-btn mode-btn" data-mode="reading"  style="background:linear-gradient(135deg,#e8e0d0,#fff8e7);color:#333">📖 Read</button>
-        <button class="ps-btn mode-btn" data-mode="meditate" style="background:linear-gradient(135deg,#1a0030,#2d0060);color:#c084fc">🧘 Zen</button>
-        <button class="ps-btn mode-btn" data-mode="focus"    style="background:linear-gradient(135deg,#001a33,#0066cc);color:#7dd3fc">💡 Focus</button>
-        <button class="ps-btn mode-btn" data-mode="party"    style="background:linear-gradient(135deg,#330066,#cc0066);color:#f0abfc">🎉 Disco</button>
+        <button class="ps-btn mode-btn" data-mode="reading"   style="background:linear-gradient(135deg,#e8e0d0,#fff8e7);color:#333">📖 Read</button>
+        <button class="ps-btn mode-btn" data-mode="meditate"  style="background:linear-gradient(135deg,#1a0030,#2d0060);color:#c084fc">🧘 Zen</button>
+        <button class="ps-btn mode-btn" data-mode="focus"     style="background:linear-gradient(135deg,#001a33,#0066cc);color:#7dd3fc">💡 Focus</button>
+        <button class="ps-btn mode-btn" data-mode="party"     style="background:linear-gradient(135deg,#330066,#cc0066);color:#f0abfc">🎉 Disco</button>
       </div>
     </div>
 
     <div class="section">
       <div class="sec-title">Presets</div>
-      <div class="preset-grid" id="preset-grid">
-        <!-- filled by JS -->
-      </div>
+      <div class="preset-grid" id="preset-grid"></div>
     </div>
 
     <div class="section">
@@ -351,13 +409,74 @@ input[type=range]::-webkit-slider-thumb {
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚙ Settings</div>
+    <div class="modal-sub">UCHI · VIBEDJ CONFIGURATION</div>
+
+    <div class="modal-section">🌉 Hue Bridge</div>
+    <div class="setting-row">
+      <label class="setting-label">Bridge IP</label>
+      <input class="setting-input" id="s-HUE_BRIDGE" placeholder="169.254.9.77">
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">Source Interface IP (en0)</label>
+      <input class="setting-input" id="s-HUE_SRC" placeholder="169.254.234.184">
+      <span class="setting-hint">The link-local IP of your Mac's Ethernet interface</span>
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">API Key</label>
+      <input class="setting-input" id="s-HUE_API_KEY" placeholder="Leave blank to keep current">
+      <span class="setting-hint">Leave blank to keep the existing key</span>
+    </div>
+
+    <div class="modal-section">🤖 Telegram</div>
+    <div class="setting-row">
+      <label class="setting-label">Bot Token</label>
+      <input class="setting-input" type="password" id="s-TELEGRAM_TOKEN" placeholder="Leave blank to keep current">
+      <span class="setting-hint">Get from @BotFather · leave blank to keep current</span>
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">Allowed Users</label>
+      <input class="setting-input" id="s-ALLOWED_USERS" placeholder="username1,username2">
+      <span class="setting-hint">Telegram usernames or IDs, comma-separated. Empty = open to all.</span>
+    </div>
+
+    <div class="modal-section">🧠 AI Model</div>
+    <div class="setting-row">
+      <label class="setting-label">Ollama URL</label>
+      <input class="setting-input" id="s-OLLAMA_URL" placeholder="http://localhost:11434">
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">Model</label>
+      <input class="setting-input" id="s-OLLAMA_MODEL" placeholder="llama3.2">
+    </div>
+
+    <div class="modal-section">⚡ Server</div>
+    <div class="setting-row">
+      <label class="setting-label">VibeDJ Port</label>
+      <input class="setting-input" id="s-VIBEDJ_PORT" placeholder="6969" style="max-width:120px">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-cancel" id="settings-cancel">Cancel</button>
+      <button class="btn btn-apply" id="settings-save">💾 Save Settings</button>
+    </div>
+    <div class="modal-notice" id="settings-notice">
+      ✓ Settings saved. Restart uchi services for changes to take effect:<br>
+      <code style="font-size:.65rem;opacity:.8">launchctl kickstart -k gui/$UID/com.uchi.vibedj</code>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
-let H = 0, S = 254, B = 200;         // current color (Hue API units)
-let fadeDuration = 5;                 // seconds
+let H = 0, S = 254, B = 200;
+let fadeDuration = 5;
 let activeEffect = null;
-let allLights = {};                   // { id: lightObj }
-let checkedIds = new Set();           // selected light IDs
+let allLights    = {};
+let checkedIds   = new Set();
 
 // ── Built-in presets ───────────────────────────────────────────────────────────
 const PRESETS = [
@@ -373,22 +492,18 @@ const PRESETS = [
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 const api = {
-  get:  url       => fetch(url).then(r => r.json()),
-  put:  (url, b)  => fetch(url,  { method:'PUT',  headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
-  post: (url, b)  => fetch(url,  { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
+  get:  url      => fetch(url).then(r => r.json()),
+  put:  (url, b) => fetch(url, { method:'PUT',  headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
+  post: (url, b) => fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
 };
 
-function getTargetIds() {
-  return [...checkedIds];
-}
+function getTargetIds() { return [...checkedIds]; }
 
 async function applyToSelected(state) {
   const ids = getTargetIds();
   if (!ids.length) return;
-  // Always send _ids so server knows which lights (or omit for reachable-only)
-  const allCount = Object.keys(allLights).length;
-  if (ids.length >= allCount) {
-    await api.put('/api/all/state', state);          // reachable-only fast path
+  if (ids.length >= Object.keys(allLights).length) {
+    await api.put('/api/all/state', state);
   } else {
     await api.put('/api/all/state', { ...state, _ids: ids });
   }
@@ -398,28 +513,22 @@ async function applyToSelected(state) {
 function initWheel() {
   const wrap   = document.getElementById('wheel-wrap');
   const cursor = document.getElementById('cursor');
-
   function pickColor(e) {
-    const rect = wrap.getBoundingClientRect();
+    const rect   = wrap.getBoundingClientRect();
     const cx = rect.width / 2, cy = rect.height / 2;
     const dx = (e.clientX || e.touches?.[0].clientX) - rect.left - cx;
     const dy = (e.clientY || e.touches?.[0].clientY) - rect.top  - cy;
     const r  = Math.sqrt(dx*dx + dy*dy);
     const radius = cx - 4;
     if (r > radius) return;
-
-    // angle: CSS conic starts at top (north), clockwise
-    let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI; // 0=east, clockwise in screen coords
-    let cssAngle = ((angleDeg + 90) + 360) % 360;       // 0=north to match conic-gradient
-
+    let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+    let cssAngle = ((angleDeg + 90) + 360) % 360;
     H = Math.round(cssAngle / 360 * 65535);
     S = Math.round(r / radius * 254);
-
     cursor.style.left = (dx + cx) + 'px';
     cursor.style.top  = (dy + cy) + 'px';
     updatePreview();
   }
-
   wrap.addEventListener('click',     pickColor);
   wrap.addEventListener('mousedown',  pickColor);
   wrap.addEventListener('mousemove',  e => { if (e.buttons === 1) pickColor(e); });
@@ -429,45 +538,40 @@ function initWheel() {
 
 // ── Preview ────────────────────────────────────────────────────────────────────
 function updatePreview() {
-  const h = Math.round(H / 65535 * 360);
-  const s = Math.round(S / 254 * 100);
-  const l = Math.round(B / 254 * 50);
-  const css = `hsl(${h},${s}%,${l}%)`;
+  const h   = Math.round(H / 65535 * 360);
+  const s   = Math.round(S / 254  * 100);
   const mid = `hsl(${h},${s}%,50%)`;
-
   document.getElementById('preview-bar').style.cssText =
-    `background: linear-gradient(90deg, hsl(${h},${s}%,5%), ${mid}, hsl(${h},${s}%,90%)); box-shadow: 0 0 20px ${mid}40;`;
+    `background:linear-gradient(90deg,hsl(${h},${s}%,5%),${mid},hsl(${h},${s}%,90%));box-shadow:0 0 20px ${mid}40;`;
   document.getElementById('cursor').style.background = mid;
-  document.getElementById('wheel').style.boxShadow =
-    `0 0 50px ${mid}55, 0 0 100px ${mid}22`;
-  document.getElementById('bri-slider').style.background =
-    `linear-gradient(to right, #000, ${mid})`;
+  document.getElementById('wheel').style.boxShadow   = `0 0 50px ${mid}55,0 0 100px ${mid}22`;
+  document.getElementById('bri-slider').style.background = `linear-gradient(to right,#000,${mid})`;
 }
 
 // ── Light list ─────────────────────────────────────────────────────────────────
-function renderLights(lights) {
+function renderLights(lights, highlightIds = []) {
   allLights = lights;
   const entries = Object.entries(lights);
   document.getElementById('light-count').textContent = `${entries.length} lights`;
-
   const list = document.getElementById('lights-list');
   list.innerHTML = '';
-
-  // Sort: reachable first
   entries.sort(([,a],[,b]) => (b.state.reachable ? 1 : 0) - (a.state.reachable ? 1 : 0));
-
   entries.forEach(([id, light]) => {
-    checkedIds.add(id); // select all by default
-    const row = document.createElement('div');
-    row.className = 'light-row selected';
-    row.dataset.id = id;
+    if (!checkedIds.has(id) && checkedIds.size < Object.keys(allLights).length) {
+      checkedIds.add(id);
+    }
+    checkedIds.add(id);
+    const row       = document.createElement('div');
+    const isNew     = highlightIds.includes(id);
+    row.className   = 'light-row selected' + (isNew ? ' new-light' : '');
+    row.dataset.id  = id;
     const reachable = light.state.reachable;
-    const on = light.state.on;
-    const dotClass = !reachable ? 'unreach' : on ? 'on' : 'off';
+    const on        = light.state.on;
+    const dotClass  = !reachable ? 'unreach' : on ? 'on' : 'off';
     row.innerHTML = `
       <div class="ldot ${dotClass}"></div>
-      <span class="lname" title="${light.name}">${light.name}</span>
-      <input type="checkbox" class="lchk" checked>
+      <span class="lname" title="${light.name}">${isNew ? '✨ ' : ''}${light.name}</span>
+      <input type="checkbox" class="lchk" ${checkedIds.has(id) ? 'checked' : ''}>
     `;
     row.querySelector('.lchk').addEventListener('change', e => {
       if (e.target.checked) { checkedIds.add(id); row.classList.add('selected'); }
@@ -487,9 +591,9 @@ function renderLights(lights) {
 async function setEffect(name) {
   const bpm      = parseInt(document.getElementById('bpm-input').value) || 120;
   const lights   = getTargetIds();
-  const duration = fadeDuration; // for wake/sleep: interpreted as minutes on server
-  const data = await api.post('/api/effect', { name, bpm, lights, duration });
-  activeEffect = data.activeEffect;
+  const duration = fadeDuration;
+  const data     = await api.post('/api/effect', { name, bpm, lights, duration });
+  activeEffect   = data.activeEffect;
   updateEffectUI();
 }
 
@@ -509,9 +613,8 @@ async function applyMode(key) {
 }
 
 function updateEffectUI() {
-  document.querySelectorAll('.fx-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.fx === activeEffect);
-  });
+  document.querySelectorAll('.fx-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.fx === activeEffect));
   const badge = document.getElementById('effect-badge');
   if (activeEffect && activeEffect !== 'none') {
     badge.textContent = `● ${activeEffect.toUpperCase()}`;
@@ -544,16 +647,16 @@ function renderPresets() {
 
 function loadCustomPresets() {
   const saved = JSON.parse(localStorage.getItem('vibedj_custom') || '[]');
-  const grid = document.getElementById('custom-grid');
+  const grid  = document.getElementById('custom-grid');
   grid.innerHTML = '';
   saved.forEach((p, i) => {
-    const h = Math.round(p.H / 65535 * 360);
-    const s = Math.round(p.S / 254 * 100);
+    const h   = Math.round(p.H / 65535 * 360);
+    const s   = Math.round(p.S / 254  * 100);
     const btn = document.createElement('button');
-    btn.className = 'ps-btn';
+    btn.className       = 'ps-btn';
     btn.style.background = `hsl(${h},${s}%,40%)`;
-    btn.style.color = p.B > 127 ? '#000' : '#fff';
-    btn.style.fontSize = '.6rem';
+    btn.style.color      = p.B > 127 ? '#000' : '#fff';
+    btn.style.fontSize   = '.6rem';
     btn.innerHTML = `${p.name}<br><span style="opacity:.6;font-size:.55rem">${h}° S${p.S}</span>`;
     btn.title = 'Left click: apply | Right click: delete';
     btn.addEventListener('click', async () => {
@@ -561,7 +664,7 @@ function loadCustomPresets() {
       document.getElementById('bri-slider').value = B;
       document.getElementById('sat-slider').value = S;
       updatePreview();
-      await applyToSelected({ on: true, hue: H, sat: S, bri: B, transitiontime: Math.round(fadeDuration * 10) });
+      await applyToSelected({ on:true, hue:H, sat:S, bri:B, transitiontime: Math.round(fadeDuration * 10) });
     });
     btn.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -586,35 +689,204 @@ function saveCustomPreset() {
 
 // ── Fade helpers ───────────────────────────────────────────────────────────────
 async function fadeIn() {
-  await applyToSelected({ on: true, hue: H, sat: S, bri: 1, transitiontime: 0 });
+  await applyToSelected({ on:true, hue:H, sat:S, bri:1, transitiontime:0 });
   await new Promise(r => setTimeout(r, 400));
-  await applyToSelected({ on: true, hue: H, sat: S, bri: B, transitiontime: fadeDuration * 10 });
+  await applyToSelected({ on:true, hue:H, sat:S, bri:B, transitiontime: fadeDuration * 10 });
 }
-
 async function fadeOut() {
   const t = fadeDuration * 10;
-  await applyToSelected({ bri: 1, transitiontime: t });
-  setTimeout(() => applyToSelected({ on: false, transitiontime: 0 }), fadeDuration * 1000 + 500);
+  await applyToSelected({ bri:1, transitiontime:t });
+  setTimeout(() => applyToSelected({ on:false, transitiontime:0 }), fadeDuration * 1000 + 500);
 }
-
 async function sunrise() {
-  // warm → cool white, dark → bright, over fadeDuration
-  await applyToSelected({ on: true, hue: 8000, sat: 200, bri: 1, transitiontime: 0 });
+  await applyToSelected({ on:true, hue:8000, sat:200, bri:1, transitiontime:0 });
   await new Promise(r => setTimeout(r, 400));
-  await applyToSelected({ on: true, ct: 370, bri: 50, transitiontime: fadeDuration * 3 });
+  await applyToSelected({ on:true, ct:370, bri:50, transitiontime: fadeDuration * 3 });
+  setTimeout(async () =>
+    await applyToSelected({ on:true, ct:233, bri:200, transitiontime: fadeDuration * 7 }),
+    fadeDuration * 1000 * 0.3);
+}
+async function sunset() {
+  await applyToSelected({ on:true, ct:233, bri:B, transitiontime:0 });
+  await new Promise(r => setTimeout(r, 400));
+  await applyToSelected({ on:true, hue:5000, sat:200, bri:80, transitiontime: fadeDuration * 7 });
   setTimeout(async () => {
-    await applyToSelected({ on: true, ct: 233, bri: 200, transitiontime: fadeDuration * 7 });
-  }, fadeDuration * 1000 * 0.3);
+    await applyToSelected({ on:true, hue:2000, sat:254, bri:20, transitiontime: fadeDuration * 3 });
+    setTimeout(() => applyToSelected({ on:false, transitiontime: fadeDuration * 2 }), fadeDuration * 400);
+  }, fadeDuration * 1000 * 0.7);
 }
 
-async function sunset() {
-  await applyToSelected({ on: true, ct: 233, bri: B, transitiontime: 0 });
-  await new Promise(r => setTimeout(r, 400));
-  await applyToSelected({ on: true, hue: 5000, sat: 200, bri: 80, transitiontime: fadeDuration * 7 });
-  setTimeout(async () => {
-    await applyToSelected({ on: true, hue: 2000, sat: 254, bri: 20, transitiontime: fadeDuration * 3 });
-    setTimeout(() => applyToSelected({ on: false, transitiontime: fadeDuration * 2 }), fadeDuration * 400);
-  }, fadeDuration * 1000 * 0.7);
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => { requestAnimationFrame(() => { t.classList.add('show'); }); });
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 400);
+  }, 3500);
+}
+
+// ── Xylophone spritz (Web Audio) ───────────────────────────────────────────────
+function playXylophone() {
+  try {
+    const ctx   = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98]; // C5–G6
+    notes.forEach((freq, i) => {
+      const t = ctx.currentTime + i * 0.13;
+      // Fundamental — warm sine with fast decay (xylophone body)
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.42, t + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t); osc.stop(t + 0.7);
+      // 2nd partial — xylophone characteristic bright click
+      const osc2  = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 2.756;
+      gain2.gain.setValueAtTime(0, t);
+      gain2.gain.linearRampToValueAtTime(0.14, t + 0.003);
+      gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc2.start(t); osc2.stop(t + 0.15);
+    });
+    setTimeout(() => ctx.close(), 2500);
+  } catch(e) { /* AudioContext blocked — silent fallback */ }
+}
+
+// ── Light adoption / scan ──────────────────────────────────────────────────────
+let _scanTimer    = null;
+let _prevIds      = null;
+let _prevReachable = null;
+let _celebratedIds = new Set();
+
+async function startTuneIn() {
+  const link = document.getElementById('tune-in-link');
+  if (link.dataset.scanning) return;
+  link.dataset.scanning = '1';
+  link.textContent = '⏳ scanning…';
+
+  const bar  = document.getElementById('scan-bar');
+  const fill = document.getElementById('scan-fill');
+  bar.style.display = 'block';
+  fill.style.width  = '0%';
+
+  _celebratedIds.clear();
+
+  try {
+    const resp   = await api.post('/api/scan', {});
+    _prevIds      = new Set(resp.prevIds || []);
+    _prevReachable = new Set(resp.prevReachable || []);
+    const dur    = (resp.scanDuration || 25) * 1000;
+    const start  = Date.now();
+
+    showToast('✦ Scanning for new lights… (25s)');
+
+    _scanTimer = setInterval(async () => {
+      const elapsed = Date.now() - start;
+      fill.style.width = Math.min(100, elapsed / dur * 100) + '%';
+
+      try {
+        const data = await api.get('/api/scan/new');
+
+        // Brand-new lights (Hue discovery)
+        for (const id of (data.brandNew || [])) {
+          if (!_celebratedIds.has(id)) {
+            _celebratedIds.add(id);
+            onNewLightFound(id, data.lights?.[id], 'brand new');
+          }
+        }
+        // Reconnected lights (known but were unreachable, now reachable)
+        for (const [id, light] of Object.entries(data.lights || {})) {
+          if (_prevIds.has(id) && !_prevReachable.has(id) && light.state?.reachable) {
+            if (!_celebratedIds.has(id)) {
+              _celebratedIds.add(id);
+              onNewLightFound(id, light, 'reconnected');
+            }
+          }
+        }
+
+        if (elapsed >= dur) finishScan(data.lights);
+      } catch(e) { /* poll error — keep trying */ }
+    }, 2500);
+
+  } catch(e) {
+    finishScan(null);
+    showToast('⚠ Scan failed: ' + e.message);
+  }
+}
+
+function onNewLightFound(id, lightData, type) {
+  const name = lightData?.name || `Light ${id}`;
+  playXylophone();
+  showToast(`✨ ${type === 'reconnected' ? 'Reconnected' : 'Found'}: ${name}!`);
+
+  // Ask server to run rainbow celebration on that light
+  api.post('/api/scan/celebrate', { id });
+
+  // After celebration (~2.5s), match the current vibe
+  setTimeout(() => {
+    api.put(`/api/lights/${id}/state`,
+      { on:true, hue:H, sat:S, bri:B, transitiontime:15 });
+  }, 2800);
+}
+
+function finishScan(lights) {
+  clearInterval(_scanTimer);
+  _scanTimer = null;
+  const link = document.getElementById('tune-in-link');
+  delete link.dataset.scanning;
+  link.textContent = '✨ adopt';
+  document.getElementById('scan-bar').style.display = 'none';
+  // Refresh the light list (highlight newly found lights)
+  if (lights) {
+    renderLights(lights, [..._celebratedIds]);
+  } else {
+    init();
+  }
+}
+
+// ── Settings modal ─────────────────────────────────────────────────────────────
+const SETTING_IDS = [
+  'HUE_BRIDGE','HUE_SRC','HUE_API_KEY','VIBEDJ_PORT',
+  'TELEGRAM_TOKEN','ALLOWED_USERS','OLLAMA_URL','OLLAMA_MODEL',
+];
+
+async function openSettings() {
+  document.getElementById('settings-modal').classList.add('open');
+  document.getElementById('settings-notice').style.display = 'none';
+  try {
+    const s = await api.get('/api/settings');
+    SETTING_IDS.forEach(k => {
+      const el = document.getElementById(`s-${k}`);
+      if (el) el.value = s[k] || '';
+    });
+  } catch(e) { showToast('Could not load settings'); }
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+async function saveSettings() {
+  const updates = {};
+  SETTING_IDS.forEach(k => {
+    const el = document.getElementById(`s-${k}`);
+    if (el && el.value && !el.value.includes('·')) {
+      updates[k] = el.value.trim();
+    }
+  });
+  try {
+    await api.post('/api/settings', updates);
+    document.getElementById('settings-notice').style.display = 'block';
+  } catch(e) { showToast('Save failed: ' + e.message); }
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
@@ -624,14 +896,14 @@ async function init() {
       api.get('/api/lights'),
       api.get('/api/status'),
     ]);
+    checkedIds = new Set(Object.keys(lights)); // select all
     renderLights(lights);
     activeEffect = status.activeEffect;
     updateEffectUI();
     document.getElementById('live-dot').classList.remove('off');
-    const reachCount = (status.reachable || []).length;
     document.getElementById('conn-status').textContent =
-      `bridge live · ${reachCount} reachable`;
-  } catch (e) {
+      `bridge live · ${(status.reachable || []).length} reachable`;
+  } catch(e) {
     document.getElementById('conn-status').textContent = 'bridge offline';
   }
   updatePreview();
@@ -644,7 +916,6 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCustomPresets();
   init();
 
-  // Sliders
   document.getElementById('bri-slider').addEventListener('input', e => {
     B = parseInt(e.target.value);
     document.getElementById('bri-val').textContent = B;
@@ -660,64 +931,57 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('dur-val').textContent = fadeDuration + 's';
   });
 
-  // Apply / on / off
-  document.getElementById('apply-btn').addEventListener('click', () => {
-    applyToSelected({ on: true, hue: H, sat: S, bri: B, transitiontime: Math.round(fadeDuration * 10) });
-  });
-  document.getElementById('on-btn').addEventListener('click', () => {
-    applyToSelected({ on: true, bri: B, transitiontime: 4 });
-  });
-  document.getElementById('off-btn').addEventListener('click', () => {
-    applyToSelected({ on: false, transitiontime: 0 });
-  });
-  document.getElementById('blackout-btn').addEventListener('click', () => {
-    applyToSelected({ on: false, transitiontime: 0 });
-  });
+  document.getElementById('apply-btn').addEventListener('click', () =>
+    applyToSelected({ on:true, hue:H, sat:S, bri:B, transitiontime: Math.round(fadeDuration * 10) }));
+  document.getElementById('on-btn').addEventListener('click',  () =>
+    applyToSelected({ on:true, bri:B, transitiontime:4 }));
+  document.getElementById('off-btn').addEventListener('click', () =>
+    applyToSelected({ on:false, transitiontime:0 }));
+  document.getElementById('blackout-btn').addEventListener('click', () =>
+    applyToSelected({ on:false, transitiontime:0 }));
 
-  // Effects
-  document.querySelectorAll('.fx-btn').forEach(btn => {
-    btn.addEventListener('click', () => setEffect(btn.dataset.fx));
-  });
+  document.querySelectorAll('.fx-btn').forEach(btn =>
+    btn.addEventListener('click', () => setEffect(btn.dataset.fx)));
 
-  // Transport
   document.getElementById('fade-in-btn').addEventListener('click',  fadeIn);
   document.getElementById('fade-out-btn').addEventListener('click', fadeOut);
   document.getElementById('sunrise-btn').addEventListener('click',  sunrise);
   document.getElementById('sunset-btn').addEventListener('click',   sunset);
+  document.getElementById('save-btn').addEventListener('click',     saveCustomPreset);
 
-  // Custom presets
-  document.getElementById('save-btn').addEventListener('click', saveCustomPreset);
-
-  // Select all / none
   document.getElementById('sel-all-link').addEventListener('click', () => {
     const allChecked = checkedIds.size === Object.keys(allLights).length;
-    document.querySelectorAll('.lchk').forEach((cb, i) => {
+    document.querySelectorAll('.lchk').forEach(cb => {
       cb.checked = !allChecked;
       cb.dispatchEvent(new Event('change'));
     });
   });
 
-  // Refresh
   document.getElementById('refresh-btn').addEventListener('click', init);
 
-  // BPM: update running effect immediately
   document.getElementById('bpm-input').addEventListener('change', () => {
     if (activeEffect) setEffect(activeEffect);
   });
 
-  // Mode buttons
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => applyMode(btn.dataset.mode));
+  document.querySelectorAll('.mode-btn').forEach(btn =>
+    btn.addEventListener('click', () => applyMode(btn.dataset.mode)));
+
+  document.querySelectorAll('.fx-btn[data-fx="wake"], .fx-btn[data-fx="sleep"]').forEach(btn => {
+    btn.addEventListener('mouseenter', () =>
+      document.getElementById('dur-val').textContent = fadeDuration + 'min');
+    btn.addEventListener('mouseleave', () =>
+      document.getElementById('dur-val').textContent = fadeDuration + 's');
   });
 
-  // Duration label hint for wake/sleep
-  document.querySelectorAll('.fx-btn[data-fx="wake"], .fx-btn[data-fx="sleep"]').forEach(btn => {
-    btn.addEventListener('mouseenter', () => {
-      document.getElementById('dur-val').textContent = fadeDuration + 'min';
-    });
-    btn.addEventListener('mouseleave', () => {
-      document.getElementById('dur-val').textContent = fadeDuration + 's';
-    });
+  // Tune In (adopt)
+  document.getElementById('tune-in-link').addEventListener('click', startTuneIn);
+
+  // Settings
+  document.getElementById('settings-btn').addEventListener('click',    openSettings);
+  document.getElementById('settings-cancel').addEventListener('click', closeSettings);
+  document.getElementById('settings-save').addEventListener('click',   saveSettings);
+  document.getElementById('settings-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('settings-modal')) closeSettings();
   });
 });
 </script>

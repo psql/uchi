@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """VibeDJ – fast Hue controller (HTTP, connection reuse, reachable-only)"""
-import json, math, random, threading, time
+import json, math, os, random, threading, time
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from concurrent.futures import ThreadPoolExecutor
@@ -8,11 +8,63 @@ from pathlib import Path
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse
 
-BRIDGE  = '169.254.9.77'
-API_KEY = 'e7dV5OjJMdehQOk6xoqKoxuccaQUymdJDwrezR2p'
-SRC     = ('169.254.234.184', 0)   # bind to en0 so link-local routes correctly
-PORT    = 6969
+# ── Config from .env ──────────────────────────────────────────────────────────
+_ENV    = Path(__file__).parent.parent.parent / '.env'
 PUBLIC  = Path(__file__).parent / 'public'
+
+def _parse_env(path: Path) -> dict:
+    result = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, _, v = line.partition('=')
+                result[k.strip()] = v.strip()
+    return result
+
+_cfg    = _parse_env(_ENV)
+BRIDGE  = _cfg.get('HUE_BRIDGE',  '169.254.9.77')
+API_KEY = _cfg.get('HUE_API_KEY', 'e7dV5OjJMdehQOk6xoqKoxuccaQUymdJDwrezR2p')
+SRC     = (_cfg.get('HUE_SRC', '169.254.234.184'), 0)
+PORT    = int(_cfg.get('VIBEDJ_PORT', '6969'))
+
+# ── Settings helpers ──────────────────────────────────────────────────────────
+_SETTINGS_KEYS = [
+    'HUE_BRIDGE', 'HUE_SRC', 'HUE_API_KEY', 'VIBEDJ_PORT',
+    'TELEGRAM_TOKEN', 'ALLOWED_USERS', 'OLLAMA_URL', 'OLLAMA_MODEL',
+]
+_MASKED_KEYS = {'HUE_API_KEY', 'TELEGRAM_TOKEN'}
+
+def _get_settings() -> dict:
+    data = _parse_env(_ENV)
+    out  = {}
+    for k in _SETTINGS_KEYS:
+        v = data.get(k, '')
+        if k in _MASKED_KEYS and len(v) > 8:
+            out[k] = v[:4] + '·' * 8 + v[-4:]
+        else:
+            out[k] = v
+    return out
+
+def _save_settings(updates: dict):
+    """Write updated keys to .env, preserving all other lines."""
+    lines     = _ENV.read_text().splitlines() if _ENV.exists() else []
+    updated   = set()
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#') and '=' in stripped:
+            k = stripped.split('=', 1)[0].strip()
+            if k in updates:
+                new_lines.append(f'{k}={updates[k]}')
+                updated.add(k)
+                continue
+        new_lines.append(line)
+    for k, v in updates.items():
+        if k not in updated:
+            new_lines.append(f'{k}={v}')
+    _ENV.parent.mkdir(parents=True, exist_ok=True)
+    _ENV.write_text('\n'.join(new_lines) + '\n')
 
 # ── Per-thread persistent HTTP connection ─────────────────────────────────────
 _local = threading.local()
@@ -32,7 +84,7 @@ def hue(method, path, body=None):
             c.request(method, f'/api/{API_KEY}{path}', body=payload,
                       headers={'Content-Type': 'application/json',
                                'Connection': 'keep-alive'})
-            r = c.getresponse()
+            r    = c.getresponse()
             data = r.read()
             if r.getheader('Connection', '').lower() == 'close':
                 _local.c = None
@@ -47,6 +99,7 @@ _cache_lock    = threading.Lock()
 _reachable_ids = []
 _all_ids       = []
 _lights_raw    = {}
+_known_ids: set = set()   # lights we've seen since server start
 
 def refresh_lights():
     global _reachable_ids, _all_ids, _lights_raw
@@ -60,7 +113,6 @@ def refresh_lights():
 
 # ── Parallel apply helpers ────────────────────────────────────────────────────
 def _par(ids, state):
-    """Apply state to a list of light IDs in parallel via thread pool."""
     if not ids: return
     futures = [_pool.submit(hue, 'PUT', f'/lights/{i}/state', state) for i in ids]
     for f in futures:
@@ -71,8 +123,8 @@ def apply_reachable(state): _par(_reachable_ids or _all_ids, state)
 def apply_ids(ids, state):  _par(ids, state)
 
 # ── Effect engine ─────────────────────────────────────────────────────────────
-_state = {'effect': None, 'bpm': 120, 'sel': None}
-_fxstop  = threading.Event()
+_state    = {'effect': None, 'bpm': 120, 'sel': None}
+_fxstop   = threading.Event()
 _fxthread = None
 
 def _target():
@@ -101,9 +153,9 @@ def fx_strobe(stop):
 def fx_party(stop):
     while not stop.is_set():
         ids = _target()
-        fs = [_pool.submit(hue, 'PUT', f'/lights/{i}/state',
-              {'on': True, 'hue': random.randint(0, 65535), 'sat': 254, 'bri': 220, 'transitiontime': 2})
-              for i in ids]
+        fs  = [_pool.submit(hue, 'PUT', f'/lights/{i}/state',
+               {'on': True, 'hue': random.randint(0, 65535), 'sat': 254, 'bri': 220,
+                'transitiontime': 2}) for i in ids]
         for f in fs:
             try: f.result(timeout=3)
             except: pass
@@ -112,19 +164,20 @@ def fx_party(stop):
 def fx_breathe(stop):
     t = 0
     while not stop.is_set():
-        _tapply({'on': True, 'bri': max(8, round(127 + 110 * math.sin(t))), 'transitiontime': 2})
+        _tapply({'on': True, 'bri': max(8, round(127 + 110 * math.sin(t))),
+                 'transitiontime': 2})
         t += 0.18
         stop.wait(0.3)
 
 def fx_candle(stop):
     while not stop.is_set():
         ids = _target()
-        fs = [_pool.submit(hue, 'PUT', f'/lights/{i}/state', {
-            'on': True,
+        fs  = [_pool.submit(hue, 'PUT', f'/lights/{i}/state', {
+            'on':  True,
             'hue': 5500 + random.randint(0, 2500),
-            'sat': 200 + random.randint(0, 54),
-            'bri': 140 + random.randint(0, 90),
-            'transitiontime': 3 + random.randint(0, 9)
+            'sat': 200  + random.randint(0, 54),
+            'bri': 140  + random.randint(0, 90),
+            'transitiontime': 3 + random.randint(0, 9),
         }) for i in ids]
         for f in fs:
             try: f.result(timeout=3)
@@ -134,11 +187,11 @@ def fx_candle(stop):
 def fx_rainbow(stop):
     offset = 0
     while not stop.is_set():
-        ids = _target()
+        ids  = _target()
         step = 65535 // max(len(ids), 1)
-        fs = [_pool.submit(hue, 'PUT', f'/lights/{ids[i]}/state',
-              {'on': True, 'hue': (offset + i * step) % 65535, 'sat': 254, 'bri': 200, 'transitiontime': 3})
-              for i in range(len(ids))]
+        fs   = [_pool.submit(hue, 'PUT', f'/lights/{ids[i]}/state',
+                {'on': True, 'hue': (offset + i * step) % 65535, 'sat': 254, 'bri': 200,
+                 'transitiontime': 3}) for i in range(len(ids))]
         for f in fs:
             try: f.result(timeout=3)
             except: pass
@@ -148,32 +201,31 @@ def fx_rainbow(stop):
 def fx_redAlert(stop):
     toggle = True
     while not stop.is_set():
-        _tapply({'on': True, 'hue': 0, 'sat': 254, 'bri': 254 if toggle else 15, 'transitiontime': 0})
+        _tapply({'on': True, 'hue': 0, 'sat': 254,
+                 'bri': 254 if toggle else 15, 'transitiontime': 0})
         toggle = not toggle
         stop.wait(max(0.1, 60 / _state['bpm']))
 
 def fx_wake(stop, duration_min=10):
-    """Dim warm → bright cool white over duration_min minutes (like sunrise alarm)."""
-    steps = 40
+    steps    = 40
     interval = duration_min * 60 / steps
     for i in range(steps):
         if stop.is_set(): break
         t   = i / (steps - 1)
-        ct  = round(500 - t * 300)          # 500K (candle) → 200K (daylight)
-        bri = round(1 + t * 253)             # 1 → 254
+        ct  = round(500 - t * 300)
+        bri = round(1 + t * 253)
         _tapply({'on': True, 'ct': max(153, min(500, ct)), 'bri': bri,
                  'transitiontime': round(interval * 9)})
         stop.wait(interval)
 
 def fx_sleep(stop, duration_min=10, start_bri=200):
-    """Current → warm dim → off over duration_min minutes."""
-    steps = 40
+    steps    = 40
     interval = duration_min * 60 / steps
     for i in range(steps):
         if stop.is_set(): break
         t   = i / (steps - 1)
-        bri = max(1, round(start_bri * (1 - t ** 0.7)))  # eases out
-        ct  = round(300 + t * 200)                         # cooler → warmer
+        bri = max(1, round(start_bri * (1 - t ** 0.7)))
+        ct  = round(300 + t * 200)
         _tapply({'on': True, 'ct': max(153, min(500, ct)), 'bri': bri,
                  'transitiontime': round(interval * 9)})
         stop.wait(interval)
@@ -211,7 +263,19 @@ def start_fx(name, **kwargs):
             target=EFFECTS[name], args=(_fxstop,), kwargs=kwargs, daemon=True)
         _fxthread.start()
 
-# ── HTTP server (threaded) ────────────────────────────────────────────────────
+# ── Adopt / light celebration ─────────────────────────────────────────────────
+def _celebrate_new_light(light_id: str):
+    """Rainbow spritz on a newly adopted light, then soft warm-white landing."""
+    rainbow_hues = [0, 9362, 18724, 28087, 37449, 46811, 56174, 0]
+    for h in rainbow_hues:
+        hue('PUT', f'/lights/{light_id}/state',
+            {'on': True, 'hue': h, 'sat': 254, 'bri': 220, 'transitiontime': 2})
+        time.sleep(0.28)
+    # Smooth landing to warm white — client will then apply current vibe
+    hue('PUT', f'/lights/{light_id}/state',
+        {'on': True, 'ct': 366, 'sat': 0, 'bri': 180, 'transitiontime': 10})
+
+# ── HTTP server ───────────────────────────────────────────────────────────────
 MIME = {'.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
         '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml'}
 
@@ -224,8 +288,10 @@ class Handler(BaseHTTPRequestHandler):
     def send_json(self, data, status=200):
         body = json.dumps(data).encode()
         self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Content-Type',                  'application/json')
+        self.send_header('Content-Length',                str(len(body)))
+        self.send_header('Access-Control-Allow-Origin',   '*')
+        self.send_header('Access-Control-Allow-Headers',  'Content-Type')
         self.end_headers()
         self.wfile.write(body)
 
@@ -233,13 +299,22 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(n)) if n else {}
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin',  '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
     def do_GET(self):
         p = urlparse(self.path).path
         try:
             if p == '/api/lights':
                 self.send_json(refresh_lights())
+
             elif p == '/api/groups':
                 self.send_json(hue('GET', '/groups'))
+
             elif p == '/api/status':
                 self.send_json({
                     'activeEffect':   _state['effect'],
@@ -247,12 +322,37 @@ class Handler(BaseHTTPRequestHandler):
                     'selectedLights': _state['sel'],
                     'reachable':      _reachable_ids,
                 })
+
+            elif p == '/api/settings':
+                self.send_json(_get_settings())
+
+            elif p == '/api/scan/new':
+                # Ask Hue for recently-found lights
+                new_data = hue('GET', '/lights/new')
+                data     = refresh_lights()
+                with _cache_lock:
+                    current_reachable = set(_reachable_ids)
+                    current_all       = set(_all_ids)
+                brand_new = []
+                if isinstance(new_data, dict):
+                    brand_new = [k for k in new_data
+                                 if k != 'lastscan' and k in current_all
+                                 and k not in _known_ids]
+                    _known_ids.update(brand_new)
+                self.send_json({
+                    'brandNew':       brand_new,
+                    'reachable':      list(current_reachable),
+                    'lights':         data,
+                    'lastScan':       new_data.get('lastscan', '') if isinstance(new_data, dict) else '',
+                })
+
             else:
                 fp = PUBLIC / (p.lstrip('/') or 'index.html')
                 if fp.exists() and fp.is_file():
                     c = fp.read_bytes()
                     self.send_response(200)
-                    self.send_header('Content-Type', MIME.get(fp.suffix.lower(), 'application/octet-stream'))
+                    self.send_header('Content-Type',
+                                     MIME.get(fp.suffix.lower(), 'application/octet-stream'))
                     self.send_header('Content-Length', str(len(c)))
                     self.end_headers()
                     self.wfile.write(c)
@@ -286,22 +386,52 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if p == '/api/effect':
                 name   = body.get('name', 'none')
-                bpm    = body.get('bpm',  120)
+                bpm    = body.get('bpm', 120)
                 lights = body.get('lights')
                 dur    = float(body.get('duration', 10))
-
                 _state['bpm'] = bpm
                 if lights is not None:
                     _state['sel'] = lights or None
-
                 if name == 'none' or name not in EFFECTS:
                     stop_fx()
                 elif name in ('wake', 'sleep'):
                     start_fx(name, duration_min=dur)
                 else:
                     start_fx(name)
-
                 self.send_json({'ok': True, 'activeEffect': _state['effect']})
+
+            elif p == '/api/scan':
+                # Snapshot state before triggering search
+                with _cache_lock:
+                    prev_all       = list(_all_ids)
+                    prev_reachable = list(_reachable_ids)
+                # Tell Hue bridge to search for new lights (25-second window)
+                hue('POST', '/lights')
+                data = refresh_lights()
+                _known_ids.update(_all_ids)
+                self.send_json({
+                    'ok':           True,
+                    'scanning':     True,
+                    'lights':       data,
+                    'scanDuration': 25,
+                    'prevIds':      prev_all,
+                    'prevReachable': prev_reachable,
+                })
+
+            elif p == '/api/scan/celebrate':
+                lid = str(body.get('id', ''))
+                if lid:
+                    threading.Thread(
+                        target=_celebrate_new_light, args=(lid,), daemon=True).start()
+                self.send_json({'ok': True})
+
+            elif p == '/api/settings':
+                # Reject any value that contains our mask sentinel
+                updates = {k: v for k, v in body.items()
+                           if k in _SETTINGS_KEYS and '·' not in str(v)}
+                _save_settings(updates)
+                self.send_json({'ok': True, 'restart': True})
+
             else:
                 self.send_json({'error': 'not found'}, 404)
         except Exception as e:
@@ -310,18 +440,25 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     import subprocess
     try:
-        ip = subprocess.check_output(['ipconfig', 'getifaddr', 'en1'], text=True).strip()
+        ip = subprocess.check_output(['ipconfig', 'getifaddr', 'en12'], text=True).strip()
     except Exception:
-        ip = 'check ifconfig'
+        try:
+            ip = subprocess.check_output(['ipconfig', 'getifaddr', 'en0'], text=True).strip()
+        except Exception:
+            ip = 'check ifconfig'
 
     print(f'\n🎧  VibeDJ')
     print(f'    Local  : http://localhost:{PORT}')
-    print(f'    Network: http://{ip}:{PORT}  ← open on any device')
+    print(f'    Network: http://{ip}:{PORT}')
+    print(f'    Local  : http://uchi.local:{PORT}')
     print(f'    Bridge : http://{BRIDGE}\n')
 
     try:
         refresh_lights()
-        print(f'    Lights : {len(_all_ids)} total, {len(_reachable_ids)} reachable ({", ".join(_reachable_ids[:6])}{"…" if len(_reachable_ids)>6 else ""})\n')
+        _known_ids.update(_all_ids)
+        n = len(_all_ids); r = len(_reachable_ids)
+        preview = ', '.join(_reachable_ids[:6]) + ('…' if r > 6 else '')
+        print(f'    Lights : {n} total, {r} reachable ({preview})\n')
     except Exception as e:
         print(f'    Bridge error: {e}\n')
 

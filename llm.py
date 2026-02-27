@@ -1,9 +1,10 @@
-"""うち LLM — Ollama/Llama intent parser with rule-based fallback"""
+"""うち LLM — cache → rules → Ollama, with learning"""
 import json
 import logging
 import re
 
 import httpx
+from cache import cache
 from config import cfg
 
 log = logging.getLogger('uchi.llm')
@@ -40,26 +41,42 @@ EXAMPLES
 """
 
 async def interpret(text: str) -> dict:
-    """Parse user intent via Ollama, falling back to rules if unavailable."""
+    """
+    Resolution order (fastest first):
+      1. Cache exact / fuzzy match   → ~0 ms
+      2. Rule-based parser           → ~0 ms
+      3. Ollama (Llama)              → ~300–800 ms  →  result stored in cache
+    """
+    # 1. Cache
+    hit = cache.get(text)
+    if hit:
+        return hit
+
+    # 2. Rules
+    rule_result = _rules(text)
+    if rule_result.get('plugin'):
+        return rule_result
+
+    # 3. Ollama
     try:
         async with httpx.AsyncClient(timeout=12.0) as c:
             r = await c.post(f'{cfg.OLLAMA_URL}/api/chat', json={
-                'model':   cfg.OLLAMA_MODEL,
+                'model':    cfg.OLLAMA_MODEL,
                 'messages': [
-                    {'role': 'system',  'content': SYSTEM},
-                    {'role': 'user',    'content': text},
+                    {'role': 'system', 'content': SYSTEM},
+                    {'role': 'user',   'content': text},
                 ],
                 'stream': False,
                 'format': 'json',
             })
             r.raise_for_status()
-            content = r.json()['message']['content']
-            result  = json.loads(content)
-            log.debug(f'LLM → {result}')
+            result = json.loads(r.json()['message']['content'])
+            log.info(f'Ollama → {result}')
+            cache.learn(text, result)   # ← remember for next time
             return result
     except Exception as e:
-        log.warning(f'Ollama unavailable ({e}), using rule-based fallback')
-        return _rules(text)
+        log.warning(f'Ollama unavailable ({e}), returning rule result')
+        return rule_result
 
 
 # ── Rule-based fallback ────────────────────────────────────────────────────────
