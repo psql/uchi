@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """うち (Uchi) — natural language smart home bot"""
+import asyncio
 import logging
 import subprocess
 import sys
@@ -13,7 +14,7 @@ from telegram.ext import (
 )
 
 from config import cfg
-from llm import interpret
+from llm import fast_interpret, llm_interpret, _differs_meaningfully
 from plugins import registry
 
 logging.basicConfig(
@@ -126,24 +127,54 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await ctx.bot.send_chat_action(update.effective_chat.id, 'typing')
 
     try:
-        intent      = await interpret(text)
-        plugin_name = intent.get('plugin')
-        action      = intent.get('action', 'chat')
-        params      = intent.get('params', {})
-        response    = intent.get('response', 'わかった...')
+        fast, is_definitive = fast_interpret(text)
+        plugin_name = fast.get('plugin')
 
         if plugin_name:
+            # ── Phase 1: instant execution ─────────────────────────────────
             plugin = registry.get(plugin_name)
             if plugin:
-                await plugin.execute(action, params)
+                await plugin.execute(fast['action'], fast['params'])
+            await update.message.reply_text(fast['response'])
 
-        await update.message.reply_text(response)
+            # ── Phase 2: LLM refinement in background (rules only, not cache)
+            if not is_definitive:
+                asyncio.create_task(_refine(update, text, fast))
+
+        else:
+            # No rule matched — need Ollama for a proper response
+            if is_definitive:
+                await update.message.reply_text(fast['response'])
+            else:
+                try:
+                    llm = await llm_interpret(text)
+                    llm_plugin = llm.get('plugin')
+                    if llm_plugin:
+                        plugin = registry.get(llm_plugin)
+                        if plugin:
+                            await plugin.execute(llm['action'], llm['params'])
+                    await update.message.reply_text(llm['response'])
+                except Exception:
+                    await update.message.reply_text(fast['response'])
 
     except Exception as e:
         log.error(f'handle_message error: {e}', exc_info=True)
         await update.message.reply_text(
             f"ごめんなさい 🙏 Something broke:\n`{e}`", parse_mode='Markdown'
         )
+
+async def _refine(update: Update, text: str, fast: dict):
+    """Phase 2: Llama in background. If result differs, apply smooth refinement."""
+    try:
+        refined = await llm_interpret(text)
+        if not _differs_meaningfully(fast, refined):
+            return
+        plugin = registry.get(refined.get('plugin', ''))
+        if plugin:
+            await plugin.execute(refined['action'], refined['params'])
+        await update.message.reply_text(refined['response'] + '  ↑ ✨')
+    except Exception as e:
+        log.debug(f'Phase 2 skipped: {e}')
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 def main():

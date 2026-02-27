@@ -181,7 +181,7 @@ class CommandCache:
         text = re.sub(r"[^\w\s\u3000-\u9fff]", ' ', text)  # keep CJK
         return re.sub(r'\s+', ' ', text).strip()
 
-    def get(self, text: str) -> dict | None:
+    def get(self, text: str):
         """
         Look up text in three passes:
           1. Exact match after normalisation     → instant

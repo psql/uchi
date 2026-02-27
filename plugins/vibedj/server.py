@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """VibeDJ – fast Hue controller (HTTP, connection reuse, reachable-only)"""
-import json, math, os, random, threading, time
+import json, math, os, random, socket, threading, time
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from concurrent.futures import ThreadPoolExecutor
@@ -280,7 +280,13 @@ MIME = {'.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript
         '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml'}
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    daemon_threads = True
+    daemon_threads    = True
+    address_family    = socket.AF_INET6
+
+    def server_bind(self):
+        # IPV6_V6ONLY=0 → dual-stack: accepts both IPv4 and IPv6 connections
+        self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        super().server_bind()
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
@@ -325,6 +331,16 @@ class Handler(BaseHTTPRequestHandler):
 
             elif p == '/api/settings':
                 self.send_json(_get_settings())
+
+            elif p == '/api/url':
+                ip = _get_network_ip()
+                self.send_json({
+                    'local':   f'http://localhost:{PORT}',
+                    'network': f'http://{ip}:{PORT}',
+                    'mdns':    f'http://uchi.local:{PORT}',
+                    'ip':      ip,
+                    'port':    PORT,
+                })
 
             elif p == '/api/scan/new':
                 # Ask Hue for recently-found lights
@@ -372,9 +388,32 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     apply_reachable(body)
                 self.send_json({'ok': True})
+            elif p == '/api/split/state':
+                # Distribute colors round-robin across reachable lights
+                colors = body.get('colors', [])
+                bri    = int(body.get('bri', 200))
+                tt     = int(body.get('transitiontime', 30))
+                ids    = list(_reachable_ids or _all_ids)
+                if ids and colors:
+                    futures = [
+                        _pool.submit(hue, 'PUT', f'/lights/{ids[i]}/state',
+                                     {'on': True, 'bri': bri, 'transitiontime': tt,
+                                      **colors[i % len(colors)]})
+                        for i in range(len(ids))
+                    ]
+                    for f in futures:
+                        try: f.result(timeout=5)
+                        except: pass
+                self.send_json({'ok': True})
             elif p.startswith('/api/lights/') and p.endswith('/state'):
                 lid = p.split('/')[3]
                 self.send_json(hue('PUT', f'/lights/{lid}/state', body))
+            elif p.startswith('/api/lights/'):
+                # Rename: PUT /api/lights/{id}  body: {"name": "…"}
+                parts = p.split('/')
+                if len(parts) == 4:
+                    lid = parts[3]
+                    self.send_json(hue('PUT', f'/lights/{lid}', body))
             else:
                 self.send_json({'error': 'not found'}, 404)
         except Exception as e:
@@ -437,21 +476,44 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json({'error': str(e)}, 500)
 
+def _get_network_ip():
+    """Return best outward-facing IP (hotspot > en0 > fallback)."""
+    import subprocess
+    for iface in ('en12', 'en0', 'en1'):
+        try:
+            ip = subprocess.check_output(['ipconfig', 'getifaddr', iface],
+                                         text=True).strip()
+            if ip and not ip.startswith('169.254'):
+                return ip
+        except Exception:
+            pass
+    # fallback: en0 link-local is fine for same-machine access
+    try:
+        return subprocess.check_output(['ipconfig', 'getifaddr', 'en0'], text=True).strip()
+    except Exception:
+        return 'localhost'
+
+
 if __name__ == '__main__':
     import subprocess
-    try:
-        ip = subprocess.check_output(['ipconfig', 'getifaddr', 'en12'], text=True).strip()
-    except Exception:
-        try:
-            ip = subprocess.check_output(['ipconfig', 'getifaddr', 'en0'], text=True).strip()
-        except Exception:
-            ip = 'check ifconfig'
+
+    ip = _get_network_ip()
 
     print(f'\n🎧  VibeDJ')
     print(f'    Local  : http://localhost:{PORT}')
     print(f'    Network: http://{ip}:{PORT}')
-    print(f'    Local  : http://uchi.local:{PORT}')
+    print(f'    mDNS   : http://uchi.local:{PORT}')
     print(f'    Bridge : http://{BRIDGE}\n')
+
+    # Register as Bonjour HTTP service so Safari/iOS can discover it
+    try:
+        subprocess.Popen(
+            ['dns-sd', '-R', 'VibeDJ 🏠', '_http._tcp', 'local', str(PORT)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        print(f'    Bonjour: VibeDJ._http._tcp.local registered on port {PORT}')
+    except Exception as e:
+        print(f'    Bonjour: could not register ({e})')
 
     try:
         refresh_lights()
@@ -462,7 +524,7 @@ if __name__ == '__main__':
     except Exception as e:
         print(f'    Bridge error: {e}\n')
 
-    server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
+    server = ThreadedHTTPServer(('::', PORT), Handler)
     print('    Press Ctrl+C to stop.\n')
     try:
         server.serve_forever()

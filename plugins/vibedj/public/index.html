@@ -54,6 +54,8 @@ body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira 
   letter-spacing: .08em; cursor: pointer; transition: all .2s;
 }
 .hdr-btn:hover { border-color: var(--accent); color: var(--accent); }
+.hdr-url { font-size:.65rem; letter-spacing:.05em; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hdr-url.copied { border-color: var(--green); color: var(--green); }
 
 /* ── Layout ── */
 .workspace { display: flex; flex: 1; overflow: hidden; }
@@ -94,9 +96,15 @@ body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira 
 .ldot.on      { background: var(--green); box-shadow: 0 0 5px var(--green); }
 .ldot.off     { background: var(--muted); }
 .ldot.unreach { background: var(--red); }
-.lname { flex: 1; font-size: .68rem; color: #8888aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lname { flex: 1; font-size: .68rem; color: #8888aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.lname:hover { color: var(--accent); }
 .light-row.selected .lname { color: var(--text); }
 input[type=checkbox].lchk { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+.rename-input {
+  flex: 1; background: var(--card); border: 1px solid var(--accent); color: var(--text);
+  padding: 1px 5px; border-radius: 3px; font-family: inherit; font-size: .68rem;
+  outline: none; min-width: 0; box-shadow: 0 0 0 2px rgba(139,92,246,.25);
+}
 
 /* ── Center ── */
 .center-col {
@@ -292,6 +300,7 @@ input[type=range]::-webkit-slider-thumb {
   </div>
   <button class="hdr-btn" id="refresh-btn">↺ REFRESH</button>
   <button class="hdr-btn" id="settings-btn">⚙ SETTINGS</button>
+  <button class="hdr-btn hdr-url" id="url-btn" title="Click to copy network URL">📡 …</button>
 </div>
 
 <!-- WORKSPACE -->
@@ -548,6 +557,88 @@ function updatePreview() {
   document.getElementById('bri-slider').style.background = `linear-gradient(to right,#000,${mid})`;
 }
 
+// ── Name helpers ───────────────────────────────────────────────────────────────
+function baseName(name) {
+  // Strip trailing " (n)" so "bloom (2)" → "bloom"
+  return name.replace(/\s*\(\d+\)\s*$/, '').trim();
+}
+
+// ── Light name: click=flash, dblclick=rename ───────────────────────────────────
+function makeLnameSpan(id, name, prefix = '') {
+  const span = document.createElement('span');
+  span.className = 'lname';
+  span.title = 'Click to flash · Double-click to rename';
+  span.textContent = prefix + name;
+
+  let clickTimer = null;
+  span.addEventListener('click', e => {
+    e.stopPropagation();
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      api.put(`/api/lights/${id}/state`, { alert: 'select' });
+    }, 220);
+  });
+  span.addEventListener('dblclick', e => {
+    e.stopPropagation();
+    clearTimeout(clickTimer);
+    startRename(span, id, name);
+  });
+  return span;
+}
+
+async function startRename(span, id, currentName) {
+  const input = document.createElement('input');
+  input.type  = 'text';
+  input.value = currentName;
+  input.className = 'rename-input';
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  async function finish() {
+    if (done) return; done = true;
+    const newName = input.value.trim() || currentName;
+    const base    = baseName(newName);
+
+    // Find all lights that will share this base name after the rename:
+    // — the light being renamed (always)
+    // — any other lights whose current base name already matches
+    const siblings = Object.entries(allLights)
+      .filter(([lid, l]) => lid === id || baseName(l.name) === base)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b)); // stable order by Hue ID
+
+    if (siblings.length > 1) {
+      // Renumber all of them: bloom (1), bloom (2), …
+      for (let i = 0; i < siblings.length; i++) {
+        const [lid] = siblings[i];
+        const numbered = `${base} (${i + 1})`;
+        await api.put(`/api/lights/${lid}`, { name: numbered });
+        if (allLights[lid]) allLights[lid].name = numbered;
+      }
+      renderLights(allLights);
+      showToast(`✏ ${siblings.length} lights named "${base} (n)"`);
+    } else {
+      // Unique name — just rename this one
+      if (newName !== currentName) {
+        await api.put(`/api/lights/${id}`, { name: newName });
+        if (allLights[id]) allLights[id].name = newName;
+        showToast(`✏ Renamed to "${newName}"`);
+      }
+      input.replaceWith(makeLnameSpan(id, newName));
+    }
+  }
+  function cancel() {
+    if (done) return; done = true;
+    input.replaceWith(makeLnameSpan(id, currentName));
+  }
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); finish(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  input.addEventListener('blur', finish);
+}
+
 // ── Light list ─────────────────────────────────────────────────────────────────
 function renderLights(lights, highlightIds = []) {
   allLights = lights;
@@ -568,18 +659,20 @@ function renderLights(lights, highlightIds = []) {
     const reachable = light.state.reachable;
     const on        = light.state.on;
     const dotClass  = !reachable ? 'unreach' : on ? 'on' : 'off';
-    row.innerHTML = `
-      <div class="ldot ${dotClass}"></div>
-      <span class="lname" title="${light.name}">${isNew ? '✨ ' : ''}${light.name}</span>
-      <input type="checkbox" class="lchk" ${checkedIds.has(id) ? 'checked' : ''}>
-    `;
-    row.querySelector('.lchk').addEventListener('change', e => {
+
+    const dot = document.createElement('div');
+    dot.className = `ldot ${dotClass}`;
+    const lnameSpan = makeLnameSpan(id, light.name, isNew ? '✨ ' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'lchk'; cb.checked = checkedIds.has(id);
+    row.appendChild(dot); row.appendChild(lnameSpan); row.appendChild(cb);
+
+    cb.addEventListener('change', e => {
       if (e.target.checked) { checkedIds.add(id); row.classList.add('selected'); }
       else { checkedIds.delete(id); row.classList.remove('selected'); }
     });
     row.addEventListener('click', e => {
-      if (e.target.tagName === 'INPUT') return;
-      const cb = row.querySelector('.lchk');
+      if (e.target.tagName === 'INPUT' || e.target.closest('.lname, .rename-input')) return;
       cb.checked = !cb.checked;
       cb.dispatchEvent(new Event('change'));
     });
@@ -983,6 +1076,29 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('settings-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('settings-modal')) closeSettings();
   });
+
+  // Network URL display
+  (async () => {
+    try {
+      const u = await api.get('/api/url');
+      const btn = document.getElementById('url-btn');
+      const display = u.network !== 'http://localhost:' + u.port
+        ? u.network : u.mdns;
+      btn.textContent = '📡 ' + display.replace('http://', '');
+      btn.title = `Network: ${u.network}\nmDNS: ${u.mdns}\n\nClick to copy`;
+      btn._url = u.network;
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(u.network).then(() => {
+          btn.classList.add('copied');
+          btn.textContent = '✓ copied!';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.textContent = '📡 ' + display.replace('http://', '');
+          }, 1800);
+        });
+      });
+    } catch(e) { /* server not ready */ }
+  })();
 });
 </script>
 </body>

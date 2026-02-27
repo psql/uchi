@@ -124,3 +124,13 @@ class VibeDJPlugin:
 
     async def _do_stop_effect(self, _p):
         return await self._post('/api/effect', {'name': 'none'})
+
+    async def _do_split_colors(self, p):
+        names      = p.get('colors', ['white', 'white'])
+        bri        = round(int(p.get('brightness', 80)) / 100 * 254)
+        color_specs = [COLORS.get(str(c).lower(), COLORS['white']) for c in names]
+        return await self._put('/api/split/state', {
+            'colors':         color_specs,
+            'bri':            bri,
+            'transitiontime': FADE,
+        })

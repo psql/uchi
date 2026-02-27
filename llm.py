@@ -1,4 +1,4 @@
-"""うち LLM — cache → rules → Ollama, with learning"""
+"""うち LLM — cache → rules → Ollama, with two-phase refinement"""
 import json
 import logging
 import re
@@ -16,6 +16,7 @@ You control home devices through plugins.
 AVAILABLE ACTIONS
 [plugin: vibedj — 照明 lighting]
 set_color    params: {color: str, brightness: 0-100}
+split_colors params: {colors: [str, str, ...up to 4], brightness?: 0-100}
 set_effect   params: {effect: colorCycle|strobe|party|breathe|candle|rainbow|redAlert|wake|sleep, duration?: minutes}
 set_preset   params: {preset: relax|romance|chill|arctic|focus|energize|sunset|rave}
 set_mode     params: {mode: movie|nightlamp|reading|meditate|focus}
@@ -33,71 +34,123 @@ If it's not a home-control request:
 {"plugin":null,"action":"chat","params":{},"response":"friendly reply mixing casual English + Japanese bits"}
 
 EXAMPLES
-"lights off"       → {"plugin":"vibedj","action":"turn_off","params":{},"response":"了解! Lights off 🌙"}
-"party mode"       → {"plugin":"vibedj","action":"set_effect","params":{"effect":"party"},"response":"パーティー!! 🎉 Let's go!"}
-"cozy movie vibes" → {"plugin":"vibedj","action":"set_mode","params":{"mode":"movie"},"response":"映画タイム！ Movie mode set 🎬"}
-"purple please"    → {"plugin":"vibedj","action":"set_color","params":{"color":"purple","brightness":75},"response":"むらさき！ Purple it is ✨"}
-"good morning"     → {"plugin":"vibedj","action":"set_effect","params":{"effect":"wake","duration":10},"response":"おはよう！ Sunrise wake-up ☀️"}
+"lights off"            → {"plugin":"vibedj","action":"turn_off","params":{},"response":"了解! Lights off 🌙"}
+"party mode"            → {"plugin":"vibedj","action":"set_effect","params":{"effect":"party"},"response":"パーティー!! 🎉 Let's go!"}
+"cozy movie vibes"      → {"plugin":"vibedj","action":"set_mode","params":{"mode":"movie"},"response":"映画タイム！ Movie mode set 🎬"}
+"purple please"         → {"plugin":"vibedj","action":"set_color","params":{"color":"purple","brightness":75},"response":"むらさき！ Purple it is ✨"}
+"good morning"          → {"plugin":"vibedj","action":"set_effect","params":{"effect":"wake","duration":10},"response":"おはよう！ Sunrise wake-up ☀️"}
+"pink and white"        → {"plugin":"vibedj","action":"split_colors","params":{"colors":["pink","white"],"brightness":80},"response":"ピンクと白！ Pink & white ✨"}
+"blue and purple vibes" → {"plugin":"vibedj","action":"split_colors","params":{"colors":["blue","purple"],"brightness":75},"response":"青と紫！ Blue & purple ✨"}
+"red white and blue"    → {"plugin":"vibedj","action":"split_colors","params":{"colors":["red","white","blue"],"brightness":85},"response":"赤白青！ ✨"}
 """
 
-async def interpret(text: str) -> dict:
+# ── Known color names ──────────────────────────────────────────────────────────
+_COLORS = [
+    'red', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue',
+    'indigo', 'purple', 'violet', 'pink', 'magenta', 'white', 'warm', 'cool',
+    'daylight', 'candle',
+]
+
+def _find_colors(t):
+    """Return all color names found in text t, in order."""
+    return [c for c in _COLORS if c in t]
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
+
+def fast_interpret(text):
+    """Instant interpretation: cache then rules.
+    Returns (result, is_definitive).
+      is_definitive=True  → trusted result, skip LLM refinement.
+      is_definitive=False → approximate, queue LLM refinement in background.
     """
-    Resolution order (fastest first):
-      1. Cache exact / fuzzy match   → ~0 ms
-      2. Rule-based parser           → ~0 ms
-      3. Ollama (Llama)              → ~300–800 ms  →  result stored in cache
-    """
-    # 1. Cache
     hit = cache.get(text)
     if hit:
-        return hit
+        return hit, True
+    return _rules(text), False
 
-    # 2. Rules
-    rule_result = _rules(text)
-    if rule_result.get('plugin'):
-        return rule_result
 
-    # 3. Ollama
+async def llm_interpret(text):
+    """Call Ollama, cache the result, return it. Raises on failure."""
+    async with httpx.AsyncClient(timeout=12.0) as c:
+        r = await c.post(f'{cfg.OLLAMA_URL}/api/chat', json={
+            'model':    cfg.OLLAMA_MODEL,
+            'messages': [
+                {'role': 'system', 'content': SYSTEM},
+                {'role': 'user',   'content': text},
+            ],
+            'stream': False,
+            'format': 'json',
+        })
+        r.raise_for_status()
+        result = json.loads(r.json()['message']['content'])
+        log.info(f'Ollama → {result}')
+        cache.learn(text, result)
+        return result
+
+
+def _differs_meaningfully(fast, refined):
+    """True if the LLM result warrants applying a follow-up refinement."""
+    if not refined or not refined.get('plugin'):
+        return False
+    if fast.get('action') != refined.get('action'):
+        return True
+    fp = fast.get('params', {})
+    rp = refined.get('params', {})
+    for key in ('color', 'effect', 'preset', 'mode'):
+        if fp.get(key) != rp.get(key):
+            return True
+    # Compare color lists order-insensitively
+    if set(fp.get('colors', [])) != set(rp.get('colors', [])):
+        return True
+    return False
+
+
+async def interpret(text):
+    """Legacy single-call interpret (cache → rules → Ollama)."""
+    result, is_definitive = fast_interpret(text)
+    if is_definitive or result.get('plugin'):
+        return result
     try:
-        async with httpx.AsyncClient(timeout=12.0) as c:
-            r = await c.post(f'{cfg.OLLAMA_URL}/api/chat', json={
-                'model':    cfg.OLLAMA_MODEL,
-                'messages': [
-                    {'role': 'system', 'content': SYSTEM},
-                    {'role': 'user',   'content': text},
-                ],
-                'stream': False,
-                'format': 'json',
-            })
-            r.raise_for_status()
-            result = json.loads(r.json()['message']['content'])
-            log.info(f'Ollama → {result}')
-            cache.learn(text, result)   # ← remember for next time
-            return result
+        return await llm_interpret(text)
     except Exception as e:
-        log.warning(f'Ollama unavailable ({e}), returning rule result')
-        return rule_result
+        log.warning(f'Ollama unavailable ({e}), using rule result')
+        return result
 
 
 # ── Rule-based fallback ────────────────────────────────────────────────────────
-def _rules(text: str) -> dict:
+def _rules(text):
     t = text.lower()
 
     def match(*words):
         return any(w in t for w in words)
 
-    # off
+    # ── Power ─────────────────────────────────────────────────────────────────
     if match('off', 'lights off', 'turn off', 'blackout', 'dark', '消して', 'けして'):
         return _r('turn_off', {}, '了解！ Lights off 🌙')
-    # on
     if match('turn on', 'lights on', 'all on', 'つけて'):
         return _r('turn_on', {'brightness': 80}, 'はい！ Lights on ✨')
-    # colors
-    for color in ['red','orange','yellow','lime','green','teal','cyan','blue',
-                  'indigo','purple','violet','pink','magenta','white','warm','cool']:
+
+    # ── Compound color phrases (must precede multi-color detection) ───────────
+    if 'warm white' in t:
+        return _r('set_color', {'color': 'warm', 'brightness': 80}, 'わかった！ Warm white ✨')
+    if 'cool white' in t:
+        return _r('set_color', {'color': 'cool', 'brightness': 80}, 'わかった！ Cool white ✨')
+
+    # ── Multi-color: "pink and white", "blue and purple", etc. ────────────────
+    found = _find_colors(t)
+    if len(found) >= 2:
+        label = ' + '.join(c.capitalize() for c in found[:4])
+        return _r('split_colors', {'colors': found[:4], 'brightness': 80},
+                  f'わかった！ {label} ✨')
+
+    # ── Single color ──────────────────────────────────────────────────────────
+    for color in _COLORS:
         if color in t:
-            return _r('set_color', {'color': color, 'brightness': 80}, f'わかった！ {color.capitalize()} ✨')
-    # effects
+            return _r('set_color', {'color': color, 'brightness': 80},
+                      f'わかった！ {color.capitalize()} ✨')
+
+    # ── Effects ───────────────────────────────────────────────────────────────
     if match('party', 'パーティー'):
         return _r('set_effect', {'effect': 'party'}, 'パーティー！！ 🎉')
     if match('rainbow', '虹'):
@@ -114,7 +167,8 @@ def _rules(text: str) -> dict:
         return _r('set_effect', {'effect': 'colorCycle'}, '色が変わる～ Color cycling 🌈')
     if match('stop effect', 'no effect', 'normal lighting', '止めて'):
         return _r('stop_effect', {}, '了解！ Effect stopped ⏹')
-    # presets
+
+    # ── Presets ───────────────────────────────────────────────────────────────
     if match('relax', 'relaxing', 'リラックス'):
         return _r('set_preset', {'preset': 'relax'}, 'リラックス～ 🌿')
     if match('romance', 'romantic', 'date night', 'ロマンス'):
@@ -123,9 +177,10 @@ def _rules(text: str) -> dict:
         return _r('set_preset', {'preset': 'sunset'}, '夕焼け色！ Sunset 🌇')
     if match('rave', 'club', 'disco'):
         return _r('set_preset', {'preset': 'rave'}, 'レイブ！ 🎉')
-    if match('arctic', 'ice', 'cool blue', 'teal'):
+    if match('arctic', 'ice', 'cool blue'):
         return _r('set_preset', {'preset': 'arctic'}, '氷のよう… Arctic 🧊')
-    # modes
+
+    # ── Modes ─────────────────────────────────────────────────────────────────
     if match('movie', 'film', 'cinema', '映画'):
         return _r('set_mode', {'mode': 'movie'}, '映画タイム！ 🎬')
     if match('night lamp', 'nightlight', 'night mode', '夜', 'おやすみ'):
@@ -136,7 +191,8 @@ def _rules(text: str) -> dict:
         return _r('set_mode', {'mode': 'meditate'}, 'しずか… Zen 🧘')
     if match('focus', 'work', 'study', '集中'):
         return _r('set_mode', {'mode': 'focus'}, '集中！ Focus 💡')
-    # fades / timed
+
+    # ── Fades / timed ─────────────────────────────────────────────────────────
     if match('fade in', 'brighten slowly', 'fade up'):
         return _r('fade_in', {'duration': 5}, 'じわじわ… Fading in ✨')
     if match('fade out', 'dim slowly', 'fade down'):
