@@ -289,10 +289,7 @@ cat > "$AGENTS_DIR/com.uchi.bot.plist" <<PLIST
     </array>
     <key>WorkingDirectory</key><string>$UCHI_DIR</string>
     <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key><false/>
-    </dict>
+    <key>KeepAlive</key><true/>
     <key>StandardOutPath</key><string>$UCHI_DIR/uchi.log</string>
     <key>StandardErrorPath</key><string>$UCHI_DIR/uchi.log</string>
 </dict>
@@ -300,6 +297,10 @@ cat > "$AGENTS_DIR/com.uchi.bot.plist" <<PLIST
 PLIST
 
 ok "LaunchAgent plists written"
+
+# ── Prevent system sleep (server mode) ────────────────────────────────────────
+step "Disabling system sleep"
+sudo pmset -a sleep 0 disksleep 0 && ok "System sleep disabled" || warn "Could not disable sleep — run: sudo pmset -a sleep 0 disksleep 0"
 
 # Load / restart services
 for label in com.uchi.vibedj com.uchi.bot; do
