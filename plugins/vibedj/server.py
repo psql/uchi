@@ -131,6 +131,30 @@ def _reload_bridge(bridge_ip, src_ip):
 _local = threading.local()
 _pool  = ThreadPoolExecutor(max_workers=24)
 
+# ── Auto-reconnect ─────────────────────────────────────────────────────────────
+_reconnect_lock = threading.Lock()
+_reconnecting   = False
+
+def _trigger_reconnect():
+    global _reconnecting
+    with _reconnect_lock:
+        if _reconnecting:
+            return
+        _reconnecting = True
+    def _do():
+        global _reconnecting
+        try:
+            bridge_ip, src_ip = _autodiscover_bridge()
+            _reload_bridge(bridge_ip, src_ip)
+            refresh_lights()
+            print(f'[uchi] auto-reconnected: bridge={bridge_ip} src={src_ip} '
+                  f'lights={len(_all_ids)} reachable={len(_reachable_ids)}')
+        except Exception as e:
+            print(f'[uchi] auto-reconnect failed: {e}')
+        finally:
+            _reconnecting = False
+    threading.Thread(target=_do, daemon=True).start()
+
 def _conn():
     if not hasattr(_local, 'c') or _local.c is None:
         _local.c = HTTPConnection(BRIDGE, 80, timeout=4, source_address=SRC)
@@ -153,7 +177,9 @@ def hue(method, path, body=None):
             except: return {}
         except Exception:
             _local.c = None
-            if attempt == 1: return {}
+            if attempt == 1:
+                _trigger_reconnect()
+                return {}
 
 # ── Light cache ───────────────────────────────────────────────────────────────
 _cache_lock    = threading.Lock()
