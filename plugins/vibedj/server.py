@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """VibeDJ – fast Hue controller (HTTP, connection reuse, reachable-only)"""
-import json, math, os, random, socket, threading, time
+import json, math, os, random, re, socket, subprocess, threading, time
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from concurrent.futures import ThreadPoolExecutor
@@ -65,6 +65,67 @@ def _save_settings(updates: dict):
             new_lines.append(f'{k}={v}')
     _ENV.parent.mkdir(parents=True, exist_ok=True)
     _ENV.write_text('\n'.join(new_lines) + '\n')
+
+# ── Bridge autodiscovery ──────────────────────────────────────────────────────
+def _autodiscover_bridge():
+    """Discover Hue bridge via mDNS, return (bridge_ip, src_ip) or raise."""
+
+    def _run_dns_sd(args, wait=3):
+        p = subprocess.Popen(['dns-sd'] + args,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        time.sleep(wait)
+        p.terminate()
+        try:    return p.stdout.read()
+        except: return ''
+
+    # 1. Browse for _hue._tcp
+    out = _run_dns_sd(['-B', '_hue._tcp', 'local'], wait=3)
+    m = re.search(r'Add\s+\S+\s+\d+\s+local\.\s+_hue\._tcp\.\s+(.+)', out)
+    if not m:
+        raise RuntimeError('No Hue bridge found on the network via mDNS')
+    name = m.group(1).strip()
+
+    # 2. Lookup service to get hostname
+    out = _run_dns_sd(['-L', name, '_hue._tcp', 'local'], wait=3)
+    m = re.search(r'can be reached at (\S+?)(?:\.:\d+|\.\s|$)', out)
+    if not m:
+        raise RuntimeError(f'Could not resolve service "{name}"')
+    hostname = m.group(1).rstrip('.')
+    if not hostname.endswith('.local'):
+        hostname += '.local'
+
+    # 3. Resolve hostname to IP
+    out = _run_dns_sd(['-G', 'v4', hostname], wait=3)
+    m = re.search(r'\b(\d{1,3}(?:\.\d{1,3}){3})\b', out)
+    if not m:
+        raise RuntimeError(f'Could not resolve IP for {hostname}')
+    bridge_ip = m.group(1)
+
+    # 4. Find a local interface that can reach the bridge
+    iface_out = subprocess.check_output(['ifconfig'], text=True)
+    link_locals = re.findall(r'inet (169\.254\.\d+\.\d+)', iface_out)
+    for src in link_locals:
+        try:
+            c = HTTPConnection(bridge_ip, 80, timeout=3, source_address=(src, 0))
+            c.request('GET', '/api/config')
+            c.getresponse().read()
+            c.close()
+            return bridge_ip, src
+        except Exception:
+            pass
+
+    raise RuntimeError(f'Bridge at {bridge_ip} but no local interface can reach it '
+                       f'(tried: {link_locals})')
+
+
+def _reload_bridge(bridge_ip, src_ip):
+    """Hot-reload BRIDGE/SRC globals and flush all cached connections."""
+    global BRIDGE, SRC, _local
+    BRIDGE  = bridge_ip
+    SRC     = (src_ip, 0)
+    _local  = threading.local()          # new object → all threads see no cached conn
+    _save_settings({'HUE_BRIDGE': bridge_ip, 'HUE_SRC': src_ip})
+
 
 # ── Per-thread persistent HTTP connection ─────────────────────────────────────
 _local = threading.local()
@@ -470,6 +531,18 @@ class Handler(BaseHTTPRequestHandler):
                            if k in _SETTINGS_KEYS and '·' not in str(v)}
                 _save_settings(updates)
                 self.send_json({'ok': True, 'restart': True})
+
+            elif p == '/api/reconnect':
+                bridge_ip, src_ip = _autodiscover_bridge()
+                _reload_bridge(bridge_ip, src_ip)
+                refresh_lights()
+                self.send_json({
+                    'ok':       True,
+                    'bridge':   bridge_ip,
+                    'src':      src_ip,
+                    'lights':   len(_all_ids),
+                    'reachable': len(_reachable_ids),
+                })
 
             else:
                 self.send_json({'error': 'not found'}, 404)

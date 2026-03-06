@@ -299,6 +299,7 @@ input[type=range]::-webkit-slider-thumb {
     BPM <input type="number" id="bpm-input" value="120" min="40" max="300" title="Effect BPM">
   </div>
   <button class="hdr-btn" id="refresh-btn">↺ REFRESH</button>
+  <button class="hdr-btn" id="reconnect-btn">🔌 CONNECT</button>
   <button class="hdr-btn" id="settings-btn">⚙ SETTINGS</button>
   <button class="hdr-btn hdr-url" id="url-btn" title="Click to copy network URL">📡 …</button>
 </div>
@@ -982,6 +983,31 @@ async function saveSettings() {
   } catch(e) { showToast('Save failed: ' + e.message); }
 }
 
+// ── Reconnect ──────────────────────────────────────────────────────────────────
+async function reconnect() {
+  const btn = document.getElementById('reconnect-btn');
+  btn.textContent = '⏳ scanning…';
+  btn.disabled = true;
+  document.getElementById('conn-status').textContent = 'searching for bridge…';
+  document.getElementById('live-dot').classList.add('off');
+  try {
+    const r = await api.post('/api/reconnect', {});
+    if (r.ok) {
+      showToast(`✓ Connected · Bridge ${r.bridge} · ${r.reachable} lights`);
+      await init();
+    } else {
+      showToast('⚠ ' + (r.error || 'reconnect failed'));
+      document.getElementById('conn-status').textContent = 'bridge offline';
+    }
+  } catch(e) {
+    showToast('⚠ ' + e.message);
+    document.getElementById('conn-status').textContent = 'bridge offline';
+  } finally {
+    btn.textContent = '🔌 CONNECT';
+    btn.disabled = false;
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -1051,6 +1077,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('refresh-btn').addEventListener('click', init);
+  document.getElementById('reconnect-btn').addEventListener('click', reconnect);
 
   document.getElementById('bpm-input').addEventListener('change', () => {
     if (activeEffect) setEffect(activeEffect);
